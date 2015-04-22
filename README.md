@@ -1,2 +1,2 @@
-# insert_unused_contigs
+# improve_assembly
 Tool to insert contigs to reference-assisted assembly
