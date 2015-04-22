@@ -1,0 +1,12 @@
+#TODO:
+# check overlapping contigs
+# output scaffolds
+# distances in phylo trees
+# quality of mapping
+# circular genomes
+# check multiple alignment
+# try other tool for alignment -- few sequences are aligned with bwa
+# add time stamps
+# check all params before starting
+# check write permission for dir with refs
+
