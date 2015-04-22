@@ -303,7 +303,7 @@ def get_neighbour_blocks_to_unused_contigs(unused_contigs_alignment, name_to_seq
 				if pos_in_ref >= 0:
 					(cur_block, strand, length) = seq_as_blocks[seq_id][pos_in_ref]
 					(left_block, left_strand) = (cur_block, strand)
-					left_dist = i - pos_in_ref
+					left_dist = i - pos_in_ref + length
 				else:
 					continue
 				pos_in_ref = cont_end
@@ -312,7 +312,7 @@ def get_neighbour_blocks_to_unused_contigs(unused_contigs_alignment, name_to_seq
 				if pos_in_ref < len(seq_as_blocks[seq_id]):
 					(cur_block, strand, length) = seq_as_blocks[seq_id][pos_in_ref]
 					(right_block, right_strand) = (cur_block, strand)
-					right_dist = pos_in_ref - cont_end
+					right_dist = pos_in_ref - i
 				else:
 					continue
 				if not cont_strand:
@@ -330,40 +330,62 @@ def find_blocks_to_insert(scaffolds_as_blocks, neighbour_blocks):
 	for (name, seq) in scaffolds_as_blocks.iteritems():
 		prev_block = None
 		prev_strand = None
+		prev_block_coord = -1
+		cur_pos_in_seq = -1
 		for elem in seq:
+			cur_pos_in_seq += 1
 			if elem != None:
 				(cur_block, cur_strand, length) = elem
 				if prev_block == None:
 					prev_block = cur_block
 					prev_strand = cur_strand
+					prev_block_coord = cur_pos_in_seq + length
 					continue
-				block_list = []
+				(left_coord, right_coord) = (prev_block_coord, cur_pos_in_seq)
+				contig_list = []
 				if neighbour_blocks.has_key((prev_block, prev_strand, cur_block, cur_strand)):
-					block_list = neighbour_blocks[(prev_block, prev_strand, cur_block, cur_strand)]
+					contig_list = neighbour_blocks[(prev_block, prev_strand, cur_block, cur_strand)]
 				elif neighbour_blocks.has_key((cur_block, not cur_strand, prev_block, not prev_strand)):
-					block_list = neighbour_blocks[(cur_block, not cur_strand, prev_block, not prev_strand)]
-					for i in xrange(len(block_list)):
-						(contig_name, contig_strand, seq_name, pos_in_seq, left_dist, right_dist) = block_list[i]
-						block_list[i] = (contig_name, not contig_strand, seq_name, pos_in_seq, left_dist, right_dist)
-				if len(block_list) != 0:
-					blocks_to_insert[(prev_block, prev_strand, cur_block, cur_strand)] = block_list
+					contig_list = neighbour_blocks[(cur_block, not cur_strand, prev_block, not prev_strand)]
+					for i in xrange(len(contig_list)):
+						(contig_name, contig_strand, seq_name, pos_in_seq, left_dist, right_dist) = contig_list[i]
+						contig_list[i] = (contig_name, not contig_strand, seq_name, pos_in_seq, left_dist, right_dist)
+				if len(contig_list) != 0:
+					blocks_to_insert[(prev_block, prev_strand, cur_block, cur_strand)] = (contig_list, (left_coord, right_coord, name))
 				prev_block = cur_block
 				prev_strand = cur_strand
+				prev_block_coord = cur_pos_in_seq + length
 	return blocks_to_insert
 
-def output_result(result, file_name):
-	f = open(file_name, 'w')
-	for (block_size, res) in result.iteritems():
-		f.write('--------------------\n')
-		f.write('Block size = ' + str(block_size) + '\n')
+def output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_file_name):
+	f_contigs_between_blocks = open(contigs_between_blocks_file_name, 'w')
+	for (block_size, res) in contigs_between_blocks.iteritems():
+		f_contigs_between_blocks.write('--------------------\n')
+		f_contigs_between_blocks.write('Block size = ' + str(block_size) + '\n')
 		if len(res) == 0:
-			f.write('Nothing\n')
+			f_contigs_between_blocks.write('Nothing\n')
 		else:
-			for (block_pair, contig_list) in res.iteritems():
+			for (block_pair, (contig_list, (left_coord, right_coord, scaff_name))) in res.iteritems():
 				(left, left_strand, right, right_strand) = block_pair
-				f.write('Between block ' + (["-", "+"][left_strand]) + str(left) + ' and block ' + (["-", "+"][right_strand]) + str(right) + ':\n')
+				f_contigs_between_blocks.write('Between block ' + (["-", "+"][left_strand]) + str(left) + ' and block ' + (["-", "+"][right_strand]) + str(right) + ':\n')
 				for (contig_name, contig_strand, seq_name, pos_in_seq, left_dist, right_dist) in contig_list:
-					f.write('\t' + (["-", "+"][contig_strand]) + contig_name + '\t\tleft_dist: ' + str(left_dist) + '\tright_dist: ' + str(right_dist) + '\n')
+					f_contigs_between_blocks.write('\t' + (["-", "+"][contig_strand]) + contig_name + '\t\tleft_dist: ' + str(left_dist) + '\tright_dist: ' + str(right_dist) + '\n')
+	f_contigs_between_blocks.close()
+
+def output_contigs_coords(contigs_between_blocks, contigs_coords_file_name):
+	f_contigs_coords = open(contigs_coords_file_name, 'w')
+	for (block_size, res) in contigs_between_blocks.iteritems():
+		if len(res) != 0:
+			for (block_pair, (contig_list, (left_coord, right_coord, scaff_name))) in res.iteritems():
+				(left, left_strand, right, right_strand) = block_pair
+				for (contig_name, contig_strand, seq_name, pos_in_seq, left_dist, right_dist) in contig_list:
+					coord_to_insert_left = left_coord + left_dist
+					coord_to_insert_right = right_coord - right_dist
+					if coord_to_insert_left > coord_to_insert_right:
+						(coord_to_insert_left, coord_to_insert_right) = (coord_to_insert_right, coord_to_insert_left)
+					f_contigs_coords.write(scaff_name + ':\t' + (["-", "+"][contig_strand]) + contig_name + '\t\tcoords: ' + str(coord_to_insert_left) + '-' + str(coord_to_insert_right) + '\n')
+	f_contigs_coords.close()
+
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
@@ -398,7 +420,7 @@ if __name__ == "__main__":
 	print "used contigs number\t", len(used_contigs_set)
 	print "unused contigs number\t", len(unused_contigs_set)
 
-	result = {}
+	contigs_between_blocks = {}
 	for b in blocks:
 		block_size = str(b)
 		if os.path.exists(os.path.join(ragout_workdir_path, "sibelia-workdir")):
@@ -410,11 +432,13 @@ if __name__ == "__main__":
 		neighbour_blocks = get_neighbour_blocks_to_unused_contigs(unused_contigs_alignment, name_to_seq_id, seq_as_blocks)
 
 		blocks_to_insert = find_blocks_to_insert(scaffolds_as_blocks, neighbour_blocks)
-		result[b] = blocks_to_insert
+		contigs_between_blocks[b] = blocks_to_insert
 		
-	result_file_name = os.path.join(work_dir, 'result.txt')
-	output_result(result, result_file_name)
+	contigs_between_blocks_file_name = os.path.join(work_dir, 'contigs_between_blocks.txt')
+	contigs_coords_file_name = os.path.join(work_dir, 'contigs_coords.txt')
+	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_file_name)
+	output_contigs_coords(contigs_between_blocks, contigs_coords_file_name)
 	print
 	print '=============================='
-	print 'Result can be found in', result_file_name
+	print 'Result can be found in', contigs_between_blocks_file_name
 
