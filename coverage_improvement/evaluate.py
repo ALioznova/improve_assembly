@@ -73,11 +73,11 @@ def seq_reverse_complemented(record):
 	# 0x10 reverse complemented
 	return ((record ['FLAG']) & int(0x10))
 
-def process_sam_file(sam_file, output_file_name, target_len):
+def process_sam_file(sam_file, target_len):
 	number = 0
 	mapped_number = 0
+	alignment = {}
 	print
-	f_out = open(output_file_name, 'w')
 	for line in open(sam_file):
 		record = parse_sam_record(line)
 		if record:
@@ -90,12 +90,17 @@ def process_sam_file(sam_file, output_file_name, target_len):
 			ref_name = record['RNAME']
 			seq_name = record['QNAME']
 			strand = not seq_reverse_complemented(record)
-			f_out.write(ref_name + ':\t' + (["-", "+"][strand]) + seq_name + '\t' + str(begin) + '\n')
 			rc_begin = target_len[ref_name] - end
-			f_out.write(ref_name + ':\t' + (["-", "+"][not strand]) + seq_name + '\t' + str(rc_begin) + '\n')
-	f_out.close()
+			rc_end = target_len[ref_name] - begin
+			if not alignment.has_key((["-", "+"][strand]) + seq_name):
+				alignment[(["-", "+"][strand]) + seq_name] = []
+			alignment[(["-", "+"][strand]) + seq_name].append((ref_name, begin, end, False))
+			if not alignment.has_key((["-", "+"][not strand]) + seq_name):
+				alignment[(["-", "+"][not strand]) + seq_name] = []
+			alignment[(["-", "+"][not strand]) + seq_name].append((ref_name, rc_begin, rc_end, True))
 	print "Total number of sequences is: ", number
 	print "Number of mapped sequences is: ", mapped_number
+	return alignment
 
 def process_ref_file(ref_file):
 	handle = open(ref_file, "rU")
@@ -105,6 +110,32 @@ def process_ref_file(ref_file):
 	for elem in records:
 		target_len[elem.name] = len(elem.seq)
 	return target_len
+
+def process_contigs_coords(contigs_coords_path):
+	insertion = {}
+	for line in open(contigs_coords_path):
+		(scaff_name, contig_name, raw_coords) = line.split()
+		coords = [int(i) for i in (raw_coords.split('-'))]
+		if not insertion.has_key(contig_name):
+			insertion[contig_name] = []
+		insertion[contig_name].append((scaff_name, coords))
+	return insertion
+
+def compare_alignment_and_insertion(alignment, insertion, output_file_name):
+	f_out = open(output_file_name, 'w')
+	for (contig_name, coords_list) in insertion.iteritems():
+		f_out.write('----------------\n')
+		f_out.write(contig_name + '\n')
+		f_out.write('Insertion by tool:\n')
+		for (scaff_name, coords) in coords_list:
+			f_out.write(scaff_name + '\t' + str(coords[0]) + '-' + str(coords[1]) + '\n')
+		f_out.write('Real alignment:\n')
+		if not alignment.has_key(contig_name):
+			f_out.write('-\n')
+		else:
+			for ((ref_name, begin, end, rc)) in alignment[contig_name]:
+				f_out.write(ref_name + ' ' + (["", "[RC]"][rc]) + '\t' + str(begin) + '\n')
+	f_out.close()
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
@@ -127,8 +158,10 @@ if __name__ == "__main__":
 	data_name = os.path.join(os.path.dirname(unused_contigs_path), 'unused_to_target')
 	sam_file = build_alignment_bwa(bwa_path, data_name, target_path, unused_contigs_path)
 	target_len = process_ref_file(target_path)
-	output_file_name = os.path.join(os.path.dirname(unused_contigs_path), 'true_coords.txt')
-	process_sam_file(sam_file, output_file_name, target_len)
+	alignment = process_sam_file(sam_file, target_len)
+	insertion = process_contigs_coords(contigs_coords_path)
+	output_file_name = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation_result.txt')
+	compare_alignment_and_insertion(alignment, insertion, output_file_name)
 	
 	print
 	print '=============================='

@@ -393,7 +393,7 @@ def output_contigs_coords(contigs_between_blocks, contigs_coords_file_name, all_
 					coord_to_insert_right = right_coord - right_dist - all_contigs_length[contig_name]
 					if coord_to_insert_left > coord_to_insert_right:
 						(coord_to_insert_left, coord_to_insert_right) = (coord_to_insert_right, coord_to_insert_left)
-					f_contigs_coords.write(scaff_name + ':\t' + (["-", "+"][contig_strand]) + contig_name + '\t\tcoords: ' + str(coord_to_insert_left) + '-' + str(coord_to_insert_right) + '\n')
+					f_contigs_coords.write(scaff_name + '\t' + (["-", "+"][contig_strand]) + contig_name + '\t\t' + str(coord_to_insert_left) + '-' + str(coord_to_insert_right) + '\n')
 	f_contigs_coords.close()
 
 def output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename, block_size):
