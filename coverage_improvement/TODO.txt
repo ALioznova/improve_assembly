@@ -1,4 +1,5 @@
 #TODO:
+# repetative contigs
 # check overlapping contigs
 # output scaffolds
 # distances in phylo trees

@@ -10,6 +10,7 @@ from Bio.Seq import Seq
 
 #TODO:
 # find correct chromosome (scaffolds and target)
+# add circularity
 
 def build_alignment_bwa(bwa_path, data_name, ref_file, contigs_file):
 	subprocess.call([os.path.join(bwa_path, "bwa"), "index", ref_file])
@@ -127,7 +128,9 @@ def compare_alignment_and_insertion(alignment, insertion, output_file_name):
 		f_out.write('----------------\n')
 		f_out.write(contig_name + '\n')
 		f_out.write('Insertion by tool:\n')
-		for (scaff_name, coords) in coords_list:
+		unique_coords = []
+		[unique_coords.append(elem) for elem in coords_list if not unique_coords.count(elem)]
+		for (scaff_name, coords) in unique_coords:
 			f_out.write(scaff_name + '\t' + str(coords[0]) + '-' + str(coords[1]) + '\n')
 		f_out.write('Real alignment:\n')
 		if not alignment.has_key(contig_name):
