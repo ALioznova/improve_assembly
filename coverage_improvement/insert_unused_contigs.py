@@ -422,8 +422,93 @@ def output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename
 	f_scaffolds_as_blocks.write('\n')
 	f_scaffolds_as_blocks.close()
 
-def output_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, scaffolds_as_contigs_filename):
-	pass
+def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords):
+	contigs_coords_left = {}
+	for (name, seq) in scaffolds_as_contigs.iteritems():
+		contigs_coords_left[name] = [None] * len(seq)
+	for (contig_name, cur_contig_coords) in contigs_coords.iteritems():
+		for (scaff_name, coord_to_insert_left, coord_to_insert_right, contig_len) in cur_contig_coords:
+			assert (contigs_coords_left[scaff_name][coord_to_insert_left] == None)
+			contigs_coords_left[scaff_name][coord_to_insert_left] = (contig_name, coord_to_insert_right, contig_len)
+	new_contig_order = {}
+	for (name, old_scaff) in scaffolds_as_contigs.iteritems():
+		delta = 100 # possible mistake, distance which can be corrected
+		new_contig_order[name] = []
+		new_contig_coords = contigs_coords_left[name]
+		is_first = False
+		first_old = False
+		last_filled_coord = 0
+		last_contig_was_old = False
+		current_contig_is_new = False
+		for i in xrange(len(old_scaff)):
+			if old_scaff[i] != None:
+				(old_cont_name, old_cont_strand, old_cont_len) = old_scaff[i]
+				old_cont_name = compose_strand_with_name(old_cont_strand, old_cont_name)
+				old_cont_beg = i
+				current_contig_is_new = False
+				if not is_first:
+					is_first = True
+					first_old = True
+			if new_contig_coords[i] != None:
+				(new_cont_name, new_coord_to_insert_right, new_cont_len) = new_contig_coords[i]
+				new_coord_to_insert_left = i
+				current_contig_is_new = True
+				if not is_first:
+					is_first = True
+			next_name = None
+			gap = 0
+			if is_first:
+				if first_old:
+					last_contig_was_old = True
+					next_name = old_cont_name
+					gap = 0
+					last_filled_coord = last_filled_coord + gap + old_cont_len
+				else:
+					last_contig_was_old = False
+					next_name = new_cont_name
+					gap = 0
+					last_filled_coord = last_filled_coord + gap + new_cont_len
+			else:
+				if last_contig_was_old and not current_contig_is_new:
+					last_contig_was_old = True
+					next_name = old_cont_name
+					gap = old_cont_beg - last_filled_coord
+					last_filled_coord = last_filled_coord + gap + old_cont_len
+				elif last_contig_was_old and current_contig_is_new:
+					last_contig_was_old = False
+					next_name = new_cont_name
+					if last_filled_coord < new_coord_to_insert_left:
+						gap = new_coord_to_insert_left - last_filled_coord
+						last_filled_coord = last_filled_coord + gap + new_cont_len
+					elif last_filled_coord >= new_coord_to_insert_right + delta:
+						last_contig_was_old = True
+						gap = None
+					else:
+						gap = 0
+						last_filled_coord = last_filled_coord + gap + new_cont_len
+				elif not last_contig_was_old and current_contig_is_new:
+					last_contig_was_old = False
+					next_name = new_cont_name
+					if last_filled_coord <= new_coord_to_insert_left:
+						gap = new_coord_to_insert_left - last_filled_coord
+						last_filled_coord = last_filled_coord + gap + new_cont_len
+					elif last_filled_coord > new_coord_to_insert_right + 2*delta:
+						gap = None
+					else:
+						gap = 0
+						last_filled_coord = last_filled_coord + gap + new_cont_len
+				else:
+					last_contig_was_old = True
+					next_name = old_cont_name
+					if last_filled_coord <= old_cont_beg:
+						gap = old_cont_beg - last_filled_coord
+						last_filled_coord = last_filled_coord + gap + old_cont_len
+					else:
+						gap = 0
+						last_filled_coord = last_filled_coord + gap + old_cont_len
+			new_contig_order[name].append((next_name, gap))
+	return new_contig_order
+
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
@@ -484,7 +569,7 @@ if __name__ == "__main__":
 		
 	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs_length)
 	contigs_coords = output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs_length)
-	output_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, scaffolds_as_contigs_filename)
+	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords)
 
 	print
 	print '=============================='

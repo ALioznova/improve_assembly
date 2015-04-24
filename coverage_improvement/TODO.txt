@@ -1,11 +1,12 @@
 #TODO:
-# repetative contigs
-# check overlapping contigs
+# output new *.links file, add ref support info
+# check overlap of new contigs when forming fasta, check old ones too
 # output scaffolds
 # distances in phylo trees
 # quality of mapping
 # circular genomes
 # check multiple alignment
+# repetative contigs
 # try other tool for alignment -- few sequences are aligned with bwa
 # add time stamps
 # check all params before starting
