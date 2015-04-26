@@ -436,79 +436,97 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords):
 		new_contig_order[name] = []
 		new_contig_coords = contigs_coords_left[name]
 		is_first = False
+		has_first = False
 		first_old = False
 		last_filled_coord = 0
 		last_contig_was_old = False
 		current_contig_is_new = False
+		next_cont_is_known = False
 		for i in xrange(len(old_scaff)):
 			if old_scaff[i] != None:
 				(old_cont_name, old_cont_strand, old_cont_len) = old_scaff[i]
 				old_cont_name = compose_strand_with_name(old_cont_strand, old_cont_name)
 				old_cont_beg = i
 				current_contig_is_new = False
-				if not is_first:
+				if not has_first:
 					is_first = True
 					first_old = True
+					has_first = True
+				next_cont_is_known = True
 			if new_contig_coords[i] != None:
 				(new_cont_name, new_coord_to_insert_right, new_cont_len) = new_contig_coords[i]
 				new_coord_to_insert_left = i
 				current_contig_is_new = True
-				if not is_first:
+				if not has_first:
 					is_first = True
-			next_name = None
-			gap = 0
-			if is_first:
-				if first_old:
-					last_contig_was_old = True
-					next_name = old_cont_name
-					gap = 0
-					last_filled_coord = last_filled_coord + gap + old_cont_len
-				else:
-					last_contig_was_old = False
-					next_name = new_cont_name
-					gap = 0
-					last_filled_coord = last_filled_coord + gap + new_cont_len
-			else:
-				if last_contig_was_old and not current_contig_is_new:
-					last_contig_was_old = True
-					next_name = old_cont_name
-					gap = old_cont_beg - last_filled_coord
-					last_filled_coord = last_filled_coord + gap + old_cont_len
-				elif last_contig_was_old and current_contig_is_new:
-					last_contig_was_old = False
-					next_name = new_cont_name
-					if last_filled_coord < new_coord_to_insert_left:
-						gap = new_coord_to_insert_left - last_filled_coord
-						last_filled_coord = last_filled_coord + gap + new_cont_len
-					elif last_filled_coord >= new_coord_to_insert_right + delta:
+					first_old = False
+					has_first = True
+				next_cont_is_known = True
+			if next_cont_is_known:
+				next_cont_is_known = False
+				next_name = None
+				gap = None
+				if is_first:
+					if first_old:
 						last_contig_was_old = True
-						gap = None
+						next_name = old_cont_name
+						gap = 0
+						last_filled_coord = last_filled_coord + gap + old_cont_len
 					else:
+						last_contig_was_old = False
+						next_name = new_cont_name
 						gap = 0
 						last_filled_coord = last_filled_coord + gap + new_cont_len
-				elif not last_contig_was_old and current_contig_is_new:
-					last_contig_was_old = False
-					next_name = new_cont_name
-					if last_filled_coord <= new_coord_to_insert_left:
-						gap = new_coord_to_insert_left - last_filled_coord
-						last_filled_coord = last_filled_coord + gap + new_cont_len
-					elif last_filled_coord > new_coord_to_insert_right + 2*delta:
-						gap = None
-					else:
-						gap = 0
-						last_filled_coord = last_filled_coord + gap + new_cont_len
+					is_first = False
 				else:
-					last_contig_was_old = True
-					next_name = old_cont_name
-					if last_filled_coord <= old_cont_beg:
+					if last_contig_was_old and (not current_contig_is_new):
+						last_contig_was_old = True
+						next_name = old_cont_name
 						gap = old_cont_beg - last_filled_coord
 						last_filled_coord = last_filled_coord + gap + old_cont_len
+					elif last_contig_was_old and current_contig_is_new:
+						last_contig_was_old = False
+						next_name = new_cont_name
+						if last_filled_coord < new_coord_to_insert_left:
+							gap = new_coord_to_insert_left - last_filled_coord
+							last_filled_coord = last_filled_coord + gap + new_cont_len
+						elif last_filled_coord >= new_coord_to_insert_right + delta:
+							last_contig_was_old = True
+							gap = None
+						else:
+							gap = 0
+							last_filled_coord = last_filled_coord + gap + new_cont_len
+					elif (not last_contig_was_old) and current_contig_is_new:
+						last_contig_was_old = False
+						next_name = new_cont_name
+						if last_filled_coord <= new_coord_to_insert_left:
+							gap = new_coord_to_insert_left - last_filled_coord
+							last_filled_coord = last_filled_coord + gap + new_cont_len
+						elif last_filled_coord > new_coord_to_insert_right + 2*delta:
+							gap = None
+						else:
+							gap = 0
+							last_filled_coord = last_filled_coord + gap + new_cont_len
 					else:
-						gap = 0
-						last_filled_coord = last_filled_coord + gap + old_cont_len
-			new_contig_order[name].append((next_name, gap))
+						last_contig_was_old = True
+						next_name = old_cont_name
+						if last_filled_coord <= old_cont_beg:
+							gap = old_cont_beg - last_filled_coord
+							last_filled_coord = last_filled_coord + gap + old_cont_len
+						else:
+							gap = 0
+							last_filled_coord = last_filled_coord + gap + old_cont_len
+				new_contig_order[name].append((next_name, gap, current_contig_is_new))
 	return new_contig_order
 
+def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename):
+	f_out = open(scaffolds_as_contigs_filename, 'w')
+	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
+		f_out.write('========== ' + scaff_name + ' ==========\n')
+		f_out.write('contig_name\tgap\tis_new\n')
+		for (cont_name, gap, is_new) in scaff_seq:
+			f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\n')
+	f_out.close()
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
@@ -570,6 +588,7 @@ if __name__ == "__main__":
 	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs_length)
 	contigs_coords = output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs_length)
 	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords)
+	output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
 
 	print
 	print '=============================='

@@ -21,6 +21,20 @@ It works with Ragout: https://github.com/fenderglass/Ragout
 - Ragout_workdir/unused_contigs_workdir/contigs_coords.txt
     Contains information about scaffold name, contig name and
     approximate coordinates for insertion.
+- Ragout_workdir/unused_contigs_workdir/scaffolds_as_blocks.txt
+    For every block size contains Ragout scaffolds (input) as
+    list of block ids and coords.
+- Ragout_workdir/unused_contigs_workdir/unused_contigs.fasta
+     Contains contigs which weren't used by Ragout in fasta
+     format.
+- Ragout_workdir/unused_contigs_workdir/<ref_name>_aligned.sam
+    Contains alignment of unused contigs to reference genome
+    ref_name.
+- Ragout_workdir/unused_contigs_workdir/scaffolds_as_contigs.txt
+    Contains result of the tool: for every scaffold contains 
+    contigs ids and gaps between them, also for each contig
+    contains a flag indicating whether it was inserted by the
+    tool.
 
 
 =======================================================================================
