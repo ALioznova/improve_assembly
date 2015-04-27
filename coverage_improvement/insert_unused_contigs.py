@@ -135,15 +135,12 @@ def process_sam_file(ref_file, sam_file, reference_name):
 	return alignment
 
 def process_contigs_file(filename):
-	all_contigs_length = {}
 	handle = open(filename, "rU")
 	records = list(SeqIO.parse(handle, "fasta"))
 	handle.close()
-	for elem in records:
-		all_contigs_length[elem.id] = len(elem.seq)
-	return all_contigs_length
+	return SeqIO.to_dict(records)
 
-def process_links_file(filename, all_contigs_length):
+def process_links_file(filename, all_contigs):
 	used_contigs_set = Set()
 	scaffolds_as_contig_pairs = {}
 	with open(filename) as fp:
@@ -172,16 +169,16 @@ def process_links_file(filename, all_contigs_length):
 	for (scaff_name, cont_pairs) in scaffolds_as_contig_pairs.iteritems():
 		scaffold_len = 0
 		for (cont1_name, cont1_strand, cont2_name, cont2_strand, gap) in cont_pairs:
-			scaffold_len += all_contigs_length[cont1_name]
+			scaffold_len += len(all_contigs[cont1_name])
 			scaffold_len += gap
-		scaffold_len += all_contigs_length[cont2_name]
+		scaffold_len += len(all_contigs[cont2_name])
 		scaffolds_as_contigs[scaff_name] = [None] * scaffold_len
 		current_pos_in_scaff = 0
 		for (cont1_name, cont1_strand, cont2_name, cont2_strand, gap) in cont_pairs:
-			scaffolds_as_contigs[scaff_name][current_pos_in_scaff] = (cont1_name, cont1_strand, all_contigs_length[cont1_name])
-			current_pos_in_scaff += all_contigs_length[cont1_name]
+			scaffolds_as_contigs[scaff_name][current_pos_in_scaff] = (cont1_name, cont1_strand, len(all_contigs[cont1_name]))
+			current_pos_in_scaff += len(all_contigs[cont1_name])
 			current_pos_in_scaff += gap
-		scaffolds_as_contigs[scaff_name][current_pos_in_scaff] = (cont2_name, cont2_strand, all_contigs_length[cont2_name])
+		scaffolds_as_contigs[scaff_name][current_pos_in_scaff] = (cont2_name, cont2_strand, len(all_contigs[cont2_name]))
 	return (used_contigs_set, scaffolds_as_contigs)
 
 def write_unused_contigs(workdir_name, all_contigs_path, unused_contigs_set):
@@ -368,7 +365,7 @@ def find_blocks_to_insert(scaffolds_as_blocks, neighbour_blocks):
 def compose_strand_with_name(strand, name):
 	return (["-", "+"][strand]) + str(name)
 
-def output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs_length):
+def output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs):
 	f_contigs_between_blocks = open(contigs_between_blocks_filename, 'w')
 	for (block_size, res) in contigs_between_blocks.iteritems():
 		f_contigs_between_blocks.write('--------------------\n')
@@ -382,10 +379,10 @@ def output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks
 				f_contigs_between_blocks.write('Block ' + compose_strand_with_name(left_strand, left) + ' (block_end: ' + str(left_coord) + ')' + ' in ' + scaff_name + '\n')
 				f_contigs_between_blocks.write('Block ' + compose_strand_with_name(right_strand, right) + ' (block_beg: ' + str(right_coord) + ')' + ' in ' + scaff_name + '\n')
 				for (contig_name, contig_strand, left_dist, right_dist) in contig_list:
-					f_contigs_between_blocks.write('\t' + compose_strand_with_name(contig_strand, contig_name) + '\tlen:' + str(all_contigs_length[contig_name]) + '\t\tleft_dist: ' + str(left_dist) + '\tright_dist: ' + str(right_dist) + '\n')
+					f_contigs_between_blocks.write('\t' + compose_strand_with_name(contig_strand, contig_name) + '\tlen:' + str(len(all_contigs[contig_name])) + '\t\tleft_dist: ' + str(left_dist) + '\tright_dist: ' + str(right_dist) + '\n')
 	f_contigs_between_blocks.close()
 
-def output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs_length):
+def output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs):
 	contigs_coords = {}
 	f_contigs_coords = open(contigs_coords_filename, 'w')
 	for (block_size, res) in contigs_between_blocks.iteritems():
@@ -394,14 +391,14 @@ def output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_c
 				(left, left_strand, right, right_strand) = block_pair
 				for (contig_name, contig_strand, left_dist, right_dist) in contig_list:
 					coord_to_insert_left = left_coord + left_dist
-					coord_to_insert_right = right_coord - right_dist - all_contigs_length[contig_name]
+					coord_to_insert_right = right_coord - right_dist - len(all_contigs[contig_name])
 					if coord_to_insert_left > coord_to_insert_right:
 						(coord_to_insert_left, coord_to_insert_right) = (coord_to_insert_right, coord_to_insert_left)
 					contig_name_sign = compose_strand_with_name(contig_strand, contig_name)
 					f_contigs_coords.write(scaff_name + '\t' + contig_name_sign + '\t\t' + str(coord_to_insert_left) + '-' + str(coord_to_insert_right) + '\n')
 					if not contigs_coords.has_key(contig_name_sign):
 						contigs_coords[contig_name_sign] = []
-					cur_contig_coords = (scaff_name, coord_to_insert_left, coord_to_insert_right, all_contigs_length[contig_name])
+					cur_contig_coords = (scaff_name, coord_to_insert_left, coord_to_insert_right, len(all_contigs[contig_name]))
 					if not cur_contig_coords in contigs_coords[contig_name_sign]:
 						contigs_coords[contig_name_sign].append(cur_contig_coords)
 	f_contigs_coords.close()
@@ -422,7 +419,37 @@ def output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename
 	f_scaffolds_as_blocks.write('\n')
 	f_scaffolds_as_blocks.close()
 
-def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords):
+def write_contig_as_fasta(contig, file_path):
+	seq = [contig]
+	output_handle = open(file_path, "w")
+	SeqIO.write(seq, output_handle, "fasta")
+	output_handle.close()
+
+def string_overlap(str1, str2):
+	overlap = 0
+	for i in xrange(1, min(len(str1), len(str2))):
+		if str1[-i:] == str2[:i]:
+			overlap = i
+	return overlap
+
+def check_overlap_of_two_contigs(contig_1, contig_2, all_contigs, work_dir, bwa_path):
+	cont1_fasta = os.path.join(work_dir, contig_1 + ".fasta")
+	cont2_fasta = os.path.join(work_dir, contig_2 + ".fasta")
+	seq1 = all_contigs[contig_1[1:]]
+	if contig_1.startswith('-'):
+		seq1 = seq1.reverse_complement(id = "rc_" + seq1.id, description = "")
+	seq2 = all_contigs[contig_2[1:]]
+	if contig_2.startswith('-'):
+		seq2 = seq2.reverse_complement(id = "rc_" + seq2.id, description = "")
+	write_contig_as_fasta(seq1, cont1_fasta)
+	write_contig_as_fasta(seq2, cont2_fasta)
+	data_name = os.path.join(work_dir, contig_1 + '_' + contig_2)
+	alignment = build_alignment_bwa(bwa_path, data_name, cont1_fasta, cont2_fasta)
+	os.remove(cont1_fasta)
+	os.remove(cont2_fasta)
+	return 0
+
+def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs, work_dir, bwa_path):
 	contigs_coords_left = {}
 	for (name, seq) in scaffolds_as_contigs.iteritems():
 		contigs_coords_left[name] = [None] * len(seq)
@@ -432,7 +459,7 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords):
 			contigs_coords_left[scaff_name][coord_to_insert_left] = (contig_name, coord_to_insert_right, contig_len)
 	new_contig_order = {}
 	for (name, old_scaff) in scaffolds_as_contigs.iteritems():
-		delta = 100 # possible mistake, distance which can be corrected
+		delta = 1000 # possible mistake, distance which can be corrected
 		new_contig_order[name] = []
 		new_contig_coords = contigs_coords_left[name]
 		curr_cont_name = None
@@ -460,7 +487,7 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords):
 						if last_filled_coord <= curr_cont_beg:
 							gap = curr_cont_beg - last_filled_coord
 						else:
-							gap = 0 # check overlap(prev_new, cur_old)
+							gap = check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs, work_dir,  bwa_path)
 				new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
 				last_filled_coord = last_filled_coord + gap + curr_cont_len
 			if new_contig_coords[i] != None:
@@ -478,14 +505,15 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords):
 						elif last_filled_coord >= curr_cont_beg_upper_border + delta:
 							gap = None
 						else:
-							gap = 0 # check overlap(prev_old, cur_new)
+							gap = check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs, work_dir, bwa_path)
 					else:
 						if last_filled_coord <= curr_cont_beg_lower_border:
 							gap = curr_cont_beg_lower_border - last_filled_coord
 						elif last_filled_coord > curr_cont_beg_upper_border + 2*delta:
 							gap = None
 						else:
-							gap = 0 # check overlap(prev_new, cur_new)
+							gap = check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs, work_dir, bwa_path)
+				print curr_cont_name, 'beg', curr_cont_beg, 'filled', last_filled_coord, 'gap', gap
 				new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
 				if gap != None:
 					last_filled_coord = last_filled_coord + gap + curr_cont_len
@@ -522,9 +550,9 @@ if __name__ == "__main__":
 		scaffolds_links_path = os.path.join(ragout_workdir_path, "scaffolds.links")
 
 	(target_name, blocks, fasta_pathes) = parse_recipe(ragout_recipe)
-	all_contigs_length = process_contigs_file(fasta_pathes[target_name])
-	(used_contigs_set, scaffolds_as_contigs) = process_links_file(scaffolds_links_path, all_contigs_length)
-	unused_contigs_set = (Set(all_contigs_length.keys())).difference(used_contigs_set)
+	all_contigs = process_contigs_file(fasta_pathes[target_name])
+	(used_contigs_set, scaffolds_as_contigs) = process_links_file(scaffolds_links_path, all_contigs)
+	unused_contigs_set = (Set(all_contigs.keys())).difference(used_contigs_set)
 	unused_contigs_path = write_unused_contigs(ragout_workdir_path, fasta_pathes[target_name], unused_contigs_set)
 	work_dir = os.path.dirname(unused_contigs_path)
 	unused_contigs_alignment = get_unused_contigs_aligmnent(work_dir, unused_contigs_path, fasta_pathes, target_name, bwa_path)
@@ -557,9 +585,9 @@ if __name__ == "__main__":
 		
 		output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename, block_size)
 		
-	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs_length)
-	contigs_coords = output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs_length)
-	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords)
+	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs)
+	contigs_coords = output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs)
+	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs, work_dir, bwa_path)
 	output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
 
 	print
