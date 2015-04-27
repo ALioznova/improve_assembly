@@ -425,31 +425,27 @@ def write_contig_as_fasta(contig, file_path):
 	SeqIO.write(seq, output_handle, "fasta")
 	output_handle.close()
 
-def string_overlap(str1, str2):
+def precise_overlap(str1, str2):
 	overlap = 0
 	for i in xrange(1, min(len(str1), len(str2))):
 		if str1[-i:] == str2[:i]:
 			overlap = i
 	return overlap
 
-def check_overlap_of_two_contigs(contig_1, contig_2, all_contigs, work_dir, bwa_path):
-	cont1_fasta = os.path.join(work_dir, contig_1 + ".fasta")
-	cont2_fasta = os.path.join(work_dir, contig_2 + ".fasta")
+def check_overlap_of_two_contigs(contig_1, contig_2, all_contigs):
+	min_overlap = 10 # minimum value considered as a real overlap
 	seq1 = all_contigs[contig_1[1:]]
 	if contig_1.startswith('-'):
 		seq1 = seq1.reverse_complement(id = "rc_" + seq1.id, description = "")
 	seq2 = all_contigs[contig_2[1:]]
 	if contig_2.startswith('-'):
 		seq2 = seq2.reverse_complement(id = "rc_" + seq2.id, description = "")
-	write_contig_as_fasta(seq1, cont1_fasta)
-	write_contig_as_fasta(seq2, cont2_fasta)
-	data_name = os.path.join(work_dir, contig_1 + '_' + contig_2)
-	alignment = build_alignment_bwa(bwa_path, data_name, cont1_fasta, cont2_fasta)
-	os.remove(cont1_fasta)
-	os.remove(cont2_fasta)
-	return 0
+	overlap = precise_overlap(str(seq1.seq), str(seq2.seq))
+	if overlap < min_overlap:
+		overlap = 0
+	return overlap
 
-def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs, work_dir, bwa_path):
+def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs):
 	contigs_coords_left = {}
 	for (name, seq) in scaffolds_as_contigs.iteritems():
 		contigs_coords_left[name] = [None] * len(seq)
@@ -487,7 +483,7 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_
 						if last_filled_coord <= curr_cont_beg:
 							gap = curr_cont_beg - last_filled_coord
 						else:
-							gap = check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs, work_dir,  bwa_path)
+							gap = (-1) * check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs)
 				new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
 				last_filled_coord = last_filled_coord + gap + curr_cont_len
 			if new_contig_coords[i] != None:
@@ -505,17 +501,16 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_
 						elif last_filled_coord >= curr_cont_beg_upper_border + delta:
 							gap = None
 						else:
-							gap = check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs, work_dir, bwa_path)
+							gap = (-1) * check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs)
 					else:
 						if last_filled_coord <= curr_cont_beg_lower_border:
 							gap = curr_cont_beg_lower_border - last_filled_coord
 						elif last_filled_coord > curr_cont_beg_upper_border + 2*delta:
 							gap = None
 						else:
-							gap = check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs, work_dir, bwa_path)
-				print curr_cont_name, 'beg', curr_cont_beg, 'filled', last_filled_coord, 'gap', gap
-				new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
+							gap = (-1) * check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs)
 				if gap != None:
+					new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
 					last_filled_coord = last_filled_coord + gap + curr_cont_len
 	return new_contig_order
 
@@ -587,7 +582,7 @@ if __name__ == "__main__":
 		
 	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs)
 	contigs_coords = output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs)
-	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs, work_dir, bwa_path)
+	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs)
 	output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
 
 	print
