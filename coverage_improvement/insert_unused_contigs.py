@@ -327,7 +327,8 @@ def get_neighbour_blocks_to_unused_contigs(unused_contigs_alignment, name_to_seq
 					continue
 				if not neighbour_blocks.has_key((left_block, left_strand, right_block, right_strand)):
 					neighbour_blocks[(left_block, left_strand, right_block, right_strand)] = []
-				neighbour_blocks[(left_block, left_strand, right_block, right_strand)].append((cont_name, cont_strand, left_dist, right_dist))
+				ref_support = name
+				neighbour_blocks[(left_block, left_strand, right_block, right_strand)].append((cont_name, cont_strand, left_dist, right_dist, ref_support))
 	return neighbour_blocks
 
 def find_blocks_to_insert(scaffolds_as_blocks, neighbour_blocks):
@@ -353,8 +354,8 @@ def find_blocks_to_insert(scaffolds_as_blocks, neighbour_blocks):
 				elif neighbour_blocks.has_key((cur_block, not cur_strand, prev_block, not prev_strand)):
 					contig_list = neighbour_blocks[(cur_block, not cur_strand, prev_block, not prev_strand)]
 					for i in xrange(len(contig_list)):
-						(contig_name, contig_strand, left_dist, right_dist) = contig_list[i]
-						contig_list[i] = (contig_name, not contig_strand, right_dist, left_dist)
+						(contig_name, contig_strand, left_dist, right_dist, ref_support) = contig_list[i]
+						contig_list[i] = (contig_name, not contig_strand, right_dist, left_dist, ref_support)
 				if len(contig_list) != 0:
 					blocks_to_insert[(prev_block, prev_strand, cur_block, cur_strand)] = (contig_list, (left_coord, right_coord, name))
 				prev_block = cur_block
@@ -378,8 +379,8 @@ def output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks
 				f_contigs_between_blocks.write('\nBetween block ' + compose_strand_with_name(left_strand, left) + ' and block ' + compose_strand_with_name(right_strand, right) + ':\n')
 				f_contigs_between_blocks.write('Block ' + compose_strand_with_name(left_strand, left) + ' (block_end: ' + str(left_coord) + ')' + ' in ' + scaff_name + '\n')
 				f_contigs_between_blocks.write('Block ' + compose_strand_with_name(right_strand, right) + ' (block_beg: ' + str(right_coord) + ')' + ' in ' + scaff_name + '\n')
-				for (contig_name, contig_strand, left_dist, right_dist) in contig_list:
-					f_contigs_between_blocks.write('\t' + compose_strand_with_name(contig_strand, contig_name) + '\tlen:' + str(len(all_contigs[contig_name])) + '\t\tleft_dist: ' + str(left_dist) + '\tright_dist: ' + str(right_dist) + '\n')
+				for (contig_name, contig_strand, left_dist, right_dist, ref_support) in contig_list:
+					f_contigs_between_blocks.write('\t' + compose_strand_with_name(contig_strand, contig_name) + '\tlen:' + str(len(all_contigs[contig_name])) + '\t\tleft_dist: ' + str(left_dist) + '\tright_dist: ' + str(right_dist) + '\tin ' + ref_support + '\n')
 	f_contigs_between_blocks.close()
 
 def output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs):
@@ -389,7 +390,7 @@ def output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_c
 		if len(res) != 0:
 			for (block_pair, (contig_list, (left_coord, right_coord, scaff_name))) in res.iteritems():
 				(left, left_strand, right, right_strand) = block_pair
-				for (contig_name, contig_strand, left_dist, right_dist) in contig_list:
+				for (contig_name, contig_strand, left_dist, right_dist, ref_support) in contig_list:
 					coord_to_insert_left = left_coord + left_dist
 					coord_to_insert_right = right_coord - right_dist - len(all_contigs[contig_name])
 					if coord_to_insert_left > coord_to_insert_right:
@@ -398,7 +399,7 @@ def output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_c
 					f_contigs_coords.write(scaff_name + '\t' + contig_name_sign + '\t\t' + str(coord_to_insert_left) + '-' + str(coord_to_insert_right) + '\n')
 					if not contigs_coords.has_key(contig_name_sign):
 						contigs_coords[contig_name_sign] = []
-					cur_contig_coords = (scaff_name, coord_to_insert_left, coord_to_insert_right, len(all_contigs[contig_name]))
+					cur_contig_coords = (scaff_name, coord_to_insert_left, coord_to_insert_right, len(all_contigs[contig_name]), ref_support)
 					if not cur_contig_coords in contigs_coords[contig_name_sign]:
 						contigs_coords[contig_name_sign].append(cur_contig_coords)
 	f_contigs_coords.close()
@@ -425,22 +426,23 @@ def write_contig_as_fasta(contig, file_path):
 	SeqIO.write(seq, output_handle, "fasta")
 	output_handle.close()
 
-def precise_overlap(str1, str2):
+def precise_overlap(str1, str2, max_overlap):
 	overlap = 0
-	for i in xrange(1, min(len(str1), len(str2))):
+	for i in xrange(1, min(min(len(str1), len(str2)), max_overlap)):
 		if str1[-i:] == str2[:i]:
 			overlap = i
 	return overlap
 
 def check_overlap_of_two_contigs(contig_1, contig_2, all_contigs):
 	min_overlap = 10 # minimum value considered as a real overlap
+	max_overlap = 1000 # maximum value for the loop
 	seq1 = all_contigs[contig_1[1:]]
 	if contig_1.startswith('-'):
 		seq1 = seq1.reverse_complement(id = "rc_" + seq1.id, description = "")
 	seq2 = all_contigs[contig_2[1:]]
 	if contig_2.startswith('-'):
 		seq2 = seq2.reverse_complement(id = "rc_" + seq2.id, description = "")
-	overlap = precise_overlap(str(seq1.seq), str(seq2.seq))
+	overlap = precise_overlap(str(seq1.seq), str(seq2.seq), max_overlap)
 	if overlap < min_overlap:
 		overlap = 0
 	return overlap
@@ -450,9 +452,9 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_
 	for (name, seq) in scaffolds_as_contigs.iteritems():
 		contigs_coords_left[name] = [None] * len(seq)
 	for (contig_name, cur_contig_coords) in contigs_coords.iteritems():
-		for (scaff_name, coord_to_insert_left, coord_to_insert_right, contig_len) in cur_contig_coords:
+		for (scaff_name, coord_to_insert_left, coord_to_insert_right, contig_len, ref_support) in cur_contig_coords:
 			assert (contigs_coords_left[scaff_name][coord_to_insert_left] == None)
-			contigs_coords_left[scaff_name][coord_to_insert_left] = (contig_name, coord_to_insert_right, contig_len)
+			contigs_coords_left[scaff_name][coord_to_insert_left] = (contig_name, coord_to_insert_right, contig_len, ref_support)
 	new_contig_order = {}
 	for (name, old_scaff) in scaffolds_as_contigs.iteritems():
 		delta = 1000 # possible mistake, distance which can be corrected
@@ -488,7 +490,7 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_
 				last_filled_coord = last_filled_coord + gap + curr_cont_len
 			if new_contig_coords[i] != None:
 				(prev_cont_name, prev_cont_len, prev_cont_beg, prev_cont_is_new) = (curr_cont_name, curr_cont_len, curr_cont_beg, curr_cont_is_new)
-				(curr_cont_name, curr_cont_beg_upper_border, curr_cont_len) = new_contig_coords[i]
+				(curr_cont_name, curr_cont_beg_upper_border, curr_cont_len, ref_support) = new_contig_coords[i]
 				curr_cont_is_new = True
 				curr_cont_beg_lower_border = i
 				curr_cont_beg = (curr_cont_beg_lower_border, curr_cont_beg_upper_border)
@@ -510,7 +512,7 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_
 						else:
 							gap = (-1) * check_overlap_of_two_contigs(prev_cont_name, curr_cont_name, all_contigs)
 				if gap != None:
-					new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
+					new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new, ref_support))
 					last_filled_coord = last_filled_coord + gap + curr_cont_len
 	return new_contig_order
 
@@ -518,9 +520,14 @@ def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_
 	f_out = open(scaffolds_as_contigs_filename, 'w')
 	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
 		f_out.write('========== ' + scaff_name + ' ==========\n')
-		f_out.write('contig_name\tgap\tis_new\n')
-		for (cont_name, gap, is_new) in scaff_seq:
-			f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\n')
+		f_out.write('contig_name\tgap\tis_new\tref_support\n')
+		for elem in scaff_seq:
+			if not elem[2]:
+				(cont_name, gap, is_new) = elem
+				f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\n')
+			else:
+				(cont_name, gap, is_new, ref_support) = elem
+				f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\t' + ref_support + '\n')
 	f_out.close()
 
 if __name__ == "__main__":
