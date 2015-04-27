@@ -435,88 +435,60 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords):
 		delta = 100 # possible mistake, distance which can be corrected
 		new_contig_order[name] = []
 		new_contig_coords = contigs_coords_left[name]
-		is_first = False
-		has_first = False
-		first_old = False
+		curr_cont_name = None
+		curr_cont_len = None
+		curr_cont_beg = None
+		curr_cont_is_new = False
+		prev_cont_name = None
+		prev_cont_len = None
+		prev_cont_beg = None
+		prev_cont_is_new = False
 		last_filled_coord = 0
-		last_contig_was_old = False
-		current_contig_is_new = False
-		next_cont_is_known = False
 		for i in xrange(len(old_scaff)):
 			if old_scaff[i] != None:
-				(old_cont_name, old_cont_strand, old_cont_len) = old_scaff[i]
-				old_cont_name = compose_strand_with_name(old_cont_strand, old_cont_name)
-				old_cont_beg = i
-				current_contig_is_new = False
-				if not has_first:
-					is_first = True
-					first_old = True
-					has_first = True
-				next_cont_is_known = True
-			if new_contig_coords[i] != None:
-				(new_cont_name, new_coord_to_insert_right, new_cont_len) = new_contig_coords[i]
-				new_coord_to_insert_left = i
-				current_contig_is_new = True
-				if not has_first:
-					is_first = True
-					first_old = False
-					has_first = True
-				next_cont_is_known = True
-			if next_cont_is_known:
-				next_cont_is_known = False
-				next_name = None
-				gap = None
-				if is_first:
-					if first_old:
-						last_contig_was_old = True
-						next_name = old_cont_name
-						gap = 0
-						last_filled_coord = last_filled_coord + gap + old_cont_len
-					else:
-						last_contig_was_old = False
-						next_name = new_cont_name
-						gap = 0
-						last_filled_coord = last_filled_coord + gap + new_cont_len
-					is_first = False
+				(prev_cont_name, prev_cont_len, prev_cont_beg, prev_cont_is_new) = (curr_cont_name, curr_cont_len, curr_cont_beg, curr_cont_is_new)
+				(curr_cont_name, curr_cont_strand, curr_cont_len) = old_scaff[i]
+				curr_cont_name = compose_strand_with_name(curr_cont_strand, curr_cont_name)
+				curr_cont_is_new = False
+				curr_cont_beg = i
+				if prev_cont_name == None:
+					gap = 0
 				else:
-					if last_contig_was_old and (not current_contig_is_new):
-						last_contig_was_old = True
-						next_name = old_cont_name
-						gap = old_cont_beg - last_filled_coord
-						last_filled_coord = last_filled_coord + gap + old_cont_len
-					elif last_contig_was_old and current_contig_is_new:
-						last_contig_was_old = False
-						next_name = new_cont_name
-						if last_filled_coord < new_coord_to_insert_left:
-							gap = new_coord_to_insert_left - last_filled_coord
-							last_filled_coord = last_filled_coord + gap + new_cont_len
-						elif last_filled_coord >= new_coord_to_insert_right + delta:
-							last_contig_was_old = True
-							gap = None
-						else:
-							gap = 0
-							last_filled_coord = last_filled_coord + gap + new_cont_len
-					elif (not last_contig_was_old) and current_contig_is_new:
-						last_contig_was_old = False
-						next_name = new_cont_name
-						if last_filled_coord <= new_coord_to_insert_left:
-							gap = new_coord_to_insert_left - last_filled_coord
-							last_filled_coord = last_filled_coord + gap + new_cont_len
-						elif last_filled_coord > new_coord_to_insert_right + 2*delta:
-							gap = None
-						else:
-							gap = 0
-							last_filled_coord = last_filled_coord + gap + new_cont_len
+					if not prev_cont_is_new:
+						gap = curr_cont_beg - (prev_cont_beg + prev_cont_len)
 					else:
-						last_contig_was_old = True
-						next_name = old_cont_name
-						if last_filled_coord <= old_cont_beg:
-							gap = old_cont_beg - last_filled_coord
-							last_filled_coord = last_filled_coord + gap + old_cont_len
+						if last_filled_coord <= curr_cont_beg:
+							gap = curr_cont_beg - last_filled_coord
 						else:
-							gap = 0
-							last_filled_coord = last_filled_coord + gap + old_cont_len
-				new_contig_order[name].append((next_name, gap, current_contig_is_new))
+							gap = 0 # check overlap(prev_new, cur_old)
+				new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
+				last_filled_coord = last_filled_coord + gap + curr_cont_len
+			if new_contig_coords[i] != None:
+				(prev_cont_name, prev_cont_len, prev_cont_beg, prev_cont_is_new) = (curr_cont_name, curr_cont_len, curr_cont_beg, curr_cont_is_new)
+				(curr_cont_name, curr_cont_beg_upper_border, curr_cont_len) = new_contig_coords[i]
+				curr_cont_is_new = True
+				curr_cont_beg_lower_border = i
+				curr_cont_beg = (curr_cont_beg_lower_border, curr_cont_beg_upper_border)
+				if prev_cont_name == None:
+					gap = 0
+				else:
+					if not prev_cont_is_new:
+						if last_filled_coord < curr_cont_beg_lower_border:
+							gap = curr_cont_beg_lower_border - last_filled_coord
+						elif last_filled_coord >= curr_cont_beg_upper_border + delta:
+							gap = None
+						else:
+							gap = 0 # check overlap(prev_old, cur_new)
+					else:
+						if last_filled_coord <= curr_cont_beg_lower_border:
+							gap = curr_cont_beg_lower_border - last_filled_coord
+						elif last_filled_coord > curr_cont_beg_upper_border + 2*delta:
+							gap = None
+						else:
+							gap = 0 # check overlap(prev_new, cur_new)
+				new_contig_order[name].append((curr_cont_name, gap, curr_cont_is_new))
+				if gap != None:
+					last_filled_coord = last_filled_coord + gap + curr_cont_len
 	return new_contig_order
 
 def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename):
