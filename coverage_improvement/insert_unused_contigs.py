@@ -7,6 +7,8 @@ import subprocess
 import numpy
 from Bio import SeqIO
 from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
+from Bio.Alphabet import generic_dna
 
 def parse_recipe(ragout_recipe):
 	fasta_pathes = {}
@@ -449,12 +451,6 @@ def output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename
 	f_scaffolds_as_blocks.write('\n')
 	f_scaffolds_as_blocks.close()
 
-def write_contig_as_fasta(contig, file_path):
-	seq = [contig]
-	output_handle = open(file_path, "w")
-	SeqIO.write(seq, output_handle, "fasta")
-	output_handle.close()
-
 def precise_overlap(str1, str2, max_overlap):
 	overlap = 0
 	for i in xrange(1, min(min(len(str1), len(str2)), max_overlap)):
@@ -464,7 +460,7 @@ def precise_overlap(str1, str2, max_overlap):
 
 def check_overlap_of_two_contigs(contig_1, contig_2, all_contigs):
 	min_overlap = 10 # minimum value considered as a real overlap
-	max_overlap = 1000 # maximum value for the loop
+	max_overlap = 1000 # maximum value for the overlapping loop
 	seq1 = all_contigs[contig_1[1:]]
 	if contig_1.startswith('-'):
 		seq1 = seq1.reverse_complement(id = "rc_" + seq1.id, description = "")
@@ -549,6 +545,7 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_
 	return new_contig_order
 
 def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename):
+	number_of_inserted_contigs = 0
 	f_out = open(scaffolds_as_contigs_filename, 'w')
 	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
 		f_out.write('========== ' + scaff_name + ' ==========\n')
@@ -558,12 +555,36 @@ def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_
 				(cont_name, gap, is_new) = elem
 				f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\n')
 			else:
+				number_of_inserted_contigs += 1
 				(cont_name, gap, is_new, ref_support) = elem
 				f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\t')
 				for i in xrange(len(ref_support) - 1):
 					f_out.write(ref_support[i].split('.')[0] + ',')
 				f_out.write(ref_support[-1].split('.')[0] + '\n')
 	f_out.close()
+	return number_of_inserted_contigs
+
+def output_scaffolds_as_fasta(new_contig_order, all_contigs, scaffolds_as_fasta_filename):
+	scaffolds_fasta = []
+	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
+		seqs_to_concat = []
+		for elem in scaff_seq:
+			if not elem[2]:
+				(cont_name, gap, is_new) = elem
+			else:
+				(cont_name, gap, is_new, ref_support) = elem
+			if gap > 0:
+				seqs_to_concat.append(Seq('N' * gap, generic_dna))
+			cont_seq = all_contigs[cont_name[1:]].seq
+			if cont_name.startswith('-'):
+				cont_seq = cont_seq.reverse_complement()
+			if gap < 0:
+				cont_seq = cont_seq[-gap:]
+			seqs_to_concat.append(cont_seq)
+		scaffolds_fasta.append(SeqRecord(seq = sum(seqs_to_concat, Seq("", generic_dna)), id = scaff_name, description = ''))
+	output_handle = open(scaffolds_as_fasta_filename, 'w')
+	SeqIO.write(scaffolds_fasta, output_handle, "fasta")
+	output_handle.close()
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
@@ -602,6 +623,7 @@ if __name__ == "__main__":
 	contigs_between_blocks_filename = os.path.join(work_dir, 'contigs_between_blocks.txt')
 	contigs_coords_filename = os.path.join(work_dir, 'contigs_coords.txt')
 	scaffolds_as_contigs_filename = os.path.join(work_dir, 'scaffolds_as_contigs.txt')
+	scaffolds_as_fasta_filename = os.path.join(work_dir, 'scaffolds.fasta')
 
 	if os.path.exists(scaffolds_as_blocks_filename):
 		os.remove(scaffolds_as_blocks_filename)
@@ -626,9 +648,13 @@ if __name__ == "__main__":
 	contigs_coords = get_contig_coords_bounds(contigs_between_blocks, all_contigs)
 	output_contigs_coords(contigs_coords, contigs_coords_filename)
 	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs)
-	output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
+	number_of_inserted_contigs = output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
+	output_scaffolds_as_fasta(new_contig_order, all_contigs, scaffolds_as_fasta_filename)
 
 	print
 	print '=============================='
-	print 'Result can be found in', contigs_between_blocks_filename
+	print number_of_inserted_contigs, 'of ', len(unused_contigs_set), 'unused contigs were added'
+	print 'Result can be found in', scaffolds_as_contigs_filename
+	print
+	print 'New scaffolds are in', scaffolds_as_fasta_filename
 

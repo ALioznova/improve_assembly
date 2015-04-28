@@ -15,6 +15,8 @@ It works with Ragout: https://github.com/fenderglass/Ragout
 =======================================================================================
           Output:
 =======================================================================================
+- Ragout_workdir/unused_contigs_workdir/scaffolds.fasta
+    New scaffolds.
 - Ragout_workdir/unused_contigs_workdir/contigs_between_blocks.txt
     For every used block size contains list of block pairs
     with contigs names and distances to this blocks.
