@@ -428,8 +428,8 @@ def get_contig_coords_bounds(contigs_between_blocks, all_contigs):
 				contig_coords_aggregate[contig_name].append((scaff_name, lower_bound, upper_bound, cont_len, ref_support))
 	return contig_coords_aggregate
 
-def output_contigs_coords(contigs_coords, contigs_coords_filename):
-	f_contigs_coords = open(contigs_coords_filename, 'w')
+def output_contigs_coords_info(contigs_coords, contigs_coords_info_filename):
+	f_contigs_coords = open(contigs_coords_info_filename, 'w')
 	for (contig_name, info) in contigs_coords.iteritems():
 		for (scaff_name, lower_bound, upper_bound, cont_len, ref_support) in info:
 			f_contigs_coords.write(scaff_name + '\t' + contig_name + '\t\t' + str(lower_bound) + '-' + str(upper_bound) + '\t' + str(ref_support) + '\n')
@@ -564,6 +564,22 @@ def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_
 	f_out.close()
 	return number_of_inserted_contigs
 
+def output_new_contigs_coords(new_contig_order, all_contigs, new_contigs_coords_filename):
+	f_out = open(new_contigs_coords_filename, 'w')
+	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
+		cur_pos = 0
+		f_out.write('>' + scaff_name + '\n')
+		for elem in scaff_seq:
+			if not elem[2]:
+				(cont_name, gap, is_new) = elem
+				cur_pos += gap
+			else:
+				(cont_name, gap, is_new, ref_support) = elem
+				cur_pos += gap
+				f_out.write(cont_name + '\t' + str(cur_pos) + '\n')
+			cur_pos += len(all_contigs[cont_name[1:]])
+	f_out.close()
+
 def output_scaffolds_as_fasta(new_contig_order, all_contigs, scaffolds_as_fasta_filename):
 	scaffolds_fasta = []
 	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
@@ -621,8 +637,9 @@ if __name__ == "__main__":
 
 	scaffolds_as_blocks_filename = os.path.join(work_dir, 'scaffolds_as_blocks.txt')
 	contigs_between_blocks_filename = os.path.join(work_dir, 'contigs_between_blocks.txt')
-	contigs_coords_filename = os.path.join(work_dir, 'contigs_coords.txt')
+	contigs_coords_info_filename = os.path.join(work_dir, 'contigs_coords_info.txt')
 	scaffolds_as_contigs_filename = os.path.join(work_dir, 'scaffolds_as_contigs.txt')
+	new_contigs_coords_filename =  os.path.join(work_dir, 'new_contigs_coords.txt')
 	scaffolds_as_fasta_filename = os.path.join(work_dir, 'scaffolds.fasta')
 
 	if os.path.exists(scaffolds_as_blocks_filename):
@@ -646,9 +663,10 @@ if __name__ == "__main__":
 		
 	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs)
 	contigs_coords = get_contig_coords_bounds(contigs_between_blocks, all_contigs)
-	output_contigs_coords(contigs_coords, contigs_coords_filename)
+	output_contigs_coords_info(contigs_coords, contigs_coords_info_filename)
 	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs)
 	number_of_inserted_contigs = output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
+	output_new_contigs_coords(new_contig_order, all_contigs, new_contigs_coords_filename)
 	output_scaffolds_as_fasta(new_contig_order, all_contigs, scaffolds_as_fasta_filename)
 
 	print

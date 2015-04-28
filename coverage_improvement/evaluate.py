@@ -114,9 +114,13 @@ def process_ref_file(ref_file):
 
 def process_contigs_coords(contigs_coords_path):
 	insertion = {}
+	scaff_name = None
 	for line in open(contigs_coords_path):
-		(scaff_name, contig_name, raw_coords) = line.split()
-		coords = [int(i) for i in (raw_coords.split('-'))]
+		if line.startswith('>'):
+			scaff_name = (line[1:]).strip()
+			continue
+		(contig_name, coords) = line.split()
+		coords = int(coords)
 		if not insertion.has_key(contig_name):
 			insertion[contig_name] = []
 		insertion[contig_name].append((scaff_name, coords))
@@ -125,24 +129,22 @@ def process_contigs_coords(contigs_coords_path):
 def compare_alignment_and_insertion(alignment, insertion, output_file_name):
 	f_out = open(output_file_name, 'w')
 	for (contig_name, coords_list) in insertion.iteritems():
-		f_out.write('----------------\n')
-		f_out.write(contig_name + '\n')
-		f_out.write('Insertion by tool:\n')
-		unique_coords = []
-		[unique_coords.append(elem) for elem in coords_list if not unique_coords.count(elem)]
-		for (scaff_name, coords) in unique_coords:
-			f_out.write(scaff_name + '\t' + str(coords[0]) + '-' + str(coords[1]) + '\n')
-		f_out.write('Real alignment:\n')
+		f_out.write(contig_name + '\t')
+		f_out.write('tool:\t')
+		for (scaff_name, coords) in coords_list:
+			f_out.write(scaff_name + '\t' + str(coords) + '\t')
+		f_out.write('\treal:\t')
 		if not alignment.has_key(contig_name):
 			f_out.write('-\n')
 		else:
 			for ((ref_name, begin, end, rc)) in alignment[contig_name]:
-				f_out.write(ref_name + ' ' + (["", "[RC]"][rc]) + '\t' + str(begin) + '\n')
+				f_out.write(ref_name + ' ' + (["[  ]", "[RC]"][rc]) + '\t' + str(begin) + '\t')
+			f_out.write('\n')
 	f_out.close()
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
-		print "Usage:", sys.argv[0], "-b <path to bwa> -u <unused contigs> -t <target genome> -c <contigs coords>"
+		print "Usage:", sys.argv[0], "-b <path to bwa> -u <unused contigs> -t <target genome> -c <new contigs coords>"
 		print "Please use the --help option to get more usage information."
 		exit()
 

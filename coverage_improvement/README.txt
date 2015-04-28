@@ -17,10 +17,12 @@ It works with Ragout: https://github.com/fenderglass/Ragout
 =======================================================================================
 - Ragout_workdir/unused_contigs_workdir/scaffolds.fasta
     New scaffolds.
+- Ragout_workdir/unused_contigs_workdir/new_contigs_coords.txt
+    Coords of inserted contigs.
 - Ragout_workdir/unused_contigs_workdir/contigs_between_blocks.txt
     For every used block size contains list of block pairs
     with contigs names and distances to this blocks.
-- Ragout_workdir/unused_contigs_workdir/contigs_coords.txt
+- Ragout_workdir/unused_contigs_workdir/contigs_coords_info.txt
     Contains information about scaffold name, contig name and
     approximate coordinates for insertion.
 - Ragout_workdir/unused_contigs_workdir/scaffolds_as_blocks.txt
