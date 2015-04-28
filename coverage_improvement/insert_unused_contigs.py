@@ -383,31 +383,54 @@ def output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks
 					f_contigs_between_blocks.write('\t' + compose_strand_with_name(contig_strand, contig_name) + '\tlen:' + str(len(all_contigs[contig_name])) + '\t\tleft_dist: ' + str(left_dist) + '\tright_dist: ' + str(right_dist) + '\tin ' + ref_support + '\n')
 	f_contigs_between_blocks.close()
 
-def output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs):
+def get_contig_coords_bounds(contigs_between_blocks, all_contigs):
+	delta = 100 # possible gap between coords for one contig from different refs
 	contigs_coords = {}
-	f_contigs_coords = open(contigs_coords_filename, 'w')
 	for (block_size, res) in contigs_between_blocks.iteritems():
-		if len(res) != 0:
-			for (block_pair, (contig_list, (left_coord, right_coord, scaff_name))) in res.iteritems():
-				(left, left_strand, right, right_strand) = block_pair
-				for (contig_name, contig_strand, left_dist, right_dist, ref_support) in contig_list:
-					coord_to_insert_left = left_coord + left_dist
-					coord_to_insert_right = right_coord - right_dist - len(all_contigs[contig_name])
-					if coord_to_insert_left > coord_to_insert_right:
-						(coord_to_insert_left, coord_to_insert_right) = (coord_to_insert_right, coord_to_insert_left)
-					contig_name_sign = compose_strand_with_name(contig_strand, contig_name)
-					f_contigs_coords.write(scaff_name + '\t' + contig_name_sign + '\t\t' + str(coord_to_insert_left) + '-' + str(coord_to_insert_right) + '\n')
-					if not contigs_coords.has_key(contig_name_sign):
-						contigs_coords[contig_name_sign] = []
-					link_already_present = False
-					for i in xrange(len(contigs_coords[contig_name_sign])):
-						(sn, cl, cr, l, rs) = contigs_coords[contig_name_sign][i]
-						if (sn, cl, cr, l) == (scaff_name, coord_to_insert_left, coord_to_insert_right, len(all_contigs[contig_name])):
-							link_already_present = True
-							if not ref_support in contigs_coords[contig_name_sign][i][4]:
-								contigs_coords[contig_name_sign][i][4].append(ref_support)
-					if not link_already_present:
-						contigs_coords[contig_name_sign].append((scaff_name, coord_to_insert_left, coord_to_insert_right, len(all_contigs[contig_name]), [ref_support]))
+		for (block_pair, (contig_list, (left_coord, right_coord, scaff_name))) in res.iteritems():
+			(left, left_strand, right, right_strand) = block_pair
+			for (contig_name, contig_strand, left_dist, right_dist, ref_support) in contig_list:
+				coord_to_insert_left = left_coord + left_dist
+				coord_to_insert_right = right_coord - right_dist - len(all_contigs[contig_name])
+				if coord_to_insert_left > coord_to_insert_right:
+					(coord_to_insert_left, coord_to_insert_right) = (coord_to_insert_right, coord_to_insert_left)
+				contig_name_sign = compose_strand_with_name(contig_strand, contig_name)
+				if not contigs_coords.has_key(contig_name_sign):
+					contigs_coords[contig_name_sign] = []
+				contigs_coords[contig_name_sign].append((scaff_name, coord_to_insert_left, coord_to_insert_right, len(all_contigs[contig_name]), ref_support))
+	contig_coords_aggregate = {}
+	for (contig_name, info) in contigs_coords.iteritems():
+		contigs_to_scaffolds = {}
+		for (scaff_name, lower_bound, upper_bound, cont_len, ref_support) in info:
+			if not contigs_to_scaffolds.has_key(scaff_name):
+				contigs_to_scaffolds[scaff_name] = []
+			contigs_to_scaffolds[scaff_name].append((lower_bound, upper_bound, ref_support))
+		for scaff_name in contigs_to_scaffolds.iterkeys():
+			contigs_to_scaffolds[scaff_name] = sorted(contigs_to_scaffolds[scaff_name])
+		for scaff_name in contigs_to_scaffolds.iterkeys():
+			(lower_bound, upper_bound, ref_support) = contigs_to_scaffolds[scaff_name][0]
+			current_coords = [[lower_bound, upper_bound, [ref_support]]]
+			for i in xrange(len(contigs_to_scaffolds[scaff_name])):
+				(lower_bound, upper_bound, ref_support) = contigs_to_scaffolds[scaff_name][i]
+				if lower_bound + delta < current_coords[-1][1]:
+					current_coords[-1][0] = min(lower_bound, current_coords[-1][0])
+					current_coords[-1][1] = max(upper_bound, current_coords[-1][1])
+					if not ref_support in current_coords[-1][2]:
+						current_coords[-1][2].append(ref_support)
+				else:
+					current_coords.append([lower_bound, upper_bound, [ref_support]])
+			contigs_to_scaffolds[scaff_name] = current_coords
+		contig_coords_aggregate[contig_name] = []
+		for scaff_name in contigs_to_scaffolds.iterkeys():
+			for (lower_bound, upper_bound, ref_support) in contigs_to_scaffolds[scaff_name]:
+				contig_coords_aggregate[contig_name].append((scaff_name, lower_bound, upper_bound, cont_len, ref_support))
+	return contig_coords_aggregate
+
+def output_contigs_coords(contigs_coords, contigs_coords_filename):
+	f_contigs_coords = open(contigs_coords_filename, 'w')
+	for (contig_name, info) in contigs_coords.iteritems():
+		for (scaff_name, lower_bound, upper_bound, cont_len, ref_support) in info:
+			f_contigs_coords.write(scaff_name + '\t' + contig_name + '\t\t' + str(lower_bound) + '-' + str(upper_bound) + '\t' + str(ref_support) + '\n')
 	f_contigs_coords.close()
 	return contigs_coords
 
@@ -600,7 +623,8 @@ if __name__ == "__main__":
 		output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename, block_size)
 		
 	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs)
-	contigs_coords = output_contigs_coords(contigs_between_blocks, contigs_coords_filename, all_contigs)
+	contigs_coords = get_contig_coords_bounds(contigs_between_blocks, all_contigs)
+	output_contigs_coords(contigs_coords, contigs_coords_filename)
 	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs)
 	output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
 
