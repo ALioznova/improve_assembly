@@ -126,25 +126,25 @@ def process_contigs_coords(contigs_coords_path):
 		insertion[contig_name].append((scaff_name, coords))
 	return insertion
 
-def compare_alignment_and_insertion(alignment, insertion, output_file_name):
+def compare_alignment_and_insertion(alignment, insertion, scaff_len, output_file_name):
 	f_out = open(output_file_name, 'w')
 	for (contig_name, coords_list) in insertion.iteritems():
 		f_out.write(contig_name + '\t')
 		f_out.write('tool:\t')
 		for (scaff_name, coords) in coords_list:
 			f_out.write(scaff_name + '\t' + str(coords) + '\t')
-		f_out.write('\treal:\t')
+		f_out.write('real:\t')
 		if not alignment.has_key(contig_name):
 			f_out.write('-\n')
 		else:
 			for ((ref_name, begin, end, rc)) in alignment[contig_name]:
 				f_out.write(ref_name + ' ' + (["[  ]", "[RC]"][rc]) + '\t' + str(begin) + '\t')
-			f_out.write('\n')
+			f_out.write('diff: ' + [str(begin - coords), str(scaff_len[scaff_name] + begin - coords)][begin - coords < 0] + '\n')
 	f_out.close()
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
-		print "Usage:", sys.argv[0], "-b <path to bwa> -u <unused contigs> -t <target genome> -c <new contigs coords>"
+		print "Usage:", sys.argv[0], "-b <path to bwa> -u <unused contigs> -t <target genome> -c <new contigs coords> -s <scaffolds>"
 		print "Please use the --help option to get more usage information."
 		exit()
 
@@ -152,13 +152,15 @@ if __name__ == "__main__":
 	parser.add_argument("-b", "--bwa", help="path to bwa", required=True)
 	parser.add_argument("-u", "--unused", help="unused contigs", required=True)
 	parser.add_argument("-t", "--target", help="target genome", required=True)
-	parser.add_argument("-c", "--coords", help="contigs coords", required=True)
+	parser.add_argument("-c", "--coords", help="new contigs coords", required=True)
+	parser.add_argument("-s", "--scaff", help="scaffolds", required=True)
 
 	args = parser.parse_args()
 	bwa_path = args.bwa
 	unused_contigs_path = args.unused
 	target_path = args.target
 	contigs_coords_path = args.coords
+	scaffolds_path = args.scaff
 
 	data_name = os.path.join(os.path.dirname(unused_contigs_path), 'unused_to_target')
 	sam_file = build_alignment_bwa(bwa_path, data_name, target_path, unused_contigs_path)
@@ -166,7 +168,8 @@ if __name__ == "__main__":
 	alignment = process_sam_file(sam_file, target_len)
 	insertion = process_contigs_coords(contigs_coords_path)
 	output_file_name = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation_result.txt')
-	compare_alignment_and_insertion(alignment, insertion, output_file_name)
+	scaff_len = process_ref_file(scaffolds_path)
+	compare_alignment_and_insertion(alignment, insertion, scaff_len, output_file_name)
 	
 	print
 	print '=============================='
