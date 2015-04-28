@@ -410,9 +410,9 @@ def get_contig_coords_bounds(contigs_between_blocks, all_contigs):
 		for scaff_name in contigs_to_scaffolds.iterkeys():
 			(lower_bound, upper_bound, ref_support) = contigs_to_scaffolds[scaff_name][0]
 			current_coords = [[lower_bound, upper_bound, [ref_support]]]
-			for i in xrange(len(contigs_to_scaffolds[scaff_name])):
+			for i in xrange(1, len(contigs_to_scaffolds[scaff_name])):
 				(lower_bound, upper_bound, ref_support) = contigs_to_scaffolds[scaff_name][i]
-				if lower_bound + delta < current_coords[-1][1]:
+				if lower_bound <= current_coords[-1][1] + delta:
 					current_coords[-1][0] = min(lower_bound, current_coords[-1][0])
 					current_coords[-1][1] = max(upper_bound, current_coords[-1][1])
 					if not ref_support in current_coords[-1][2]:
@@ -561,8 +561,8 @@ def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_
 				(cont_name, gap, is_new, ref_support) = elem
 				f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\t')
 				for i in xrange(len(ref_support) - 1):
-					f_out.write(ref_support[i] + ', ')
-				f_out.write(ref_support[-1] + '\n')
+					f_out.write(ref_support[i].split('.')[0] + ',')
+				f_out.write(ref_support[-1].split('.')[0] + '\n')
 	f_out.close()
 
 if __name__ == "__main__":
