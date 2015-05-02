@@ -8,14 +8,10 @@ import numpy
 from Bio import SeqIO
 from Bio.Seq import Seq
 
-#TODO:
-# find correct chromosome (scaffolds and target)
-# add circularity
-
 def build_alignment_bwa(bwa_path, data_name, ref_file, contigs_file):
 	subprocess.call([os.path.join(bwa_path, "bwa"), "index", ref_file])
 	with open(data_name + "_aligned.sam", "w") as sam_file:
-		subprocess.call([os.path.join(bwa_path, "bwa"), "mem", ref_file, contigs_file], stdout = sam_file)
+		subprocess.call([os.path.join(bwa_path, "bwa"), "mem", ref_file, contigs_file, '-a'], stdout = sam_file)
 	os.remove(ref_file + ".amb")
 	os.remove(ref_file + ".ann")
 	os.remove(ref_file + ".bwt")
@@ -64,17 +60,17 @@ def parse_sam_record(line):
 
 def sequence_unmapped(record):
 	# 0x4 segment unmapped, 0x8 next segment in the template unmapped
-	return (record ['FLAG'] & int(0x4)) or (record ['FLAG'] & int(0x8))
+	return bool(record ['FLAG'] & int(0x4)) or (record ['FLAG'] & int(0x8))
 
 def supplementary_alignment(record):
 	# 0x800 supplementary alignment
-	return ((record ['FLAG']) & int(0x800))
+	return bool((record ['FLAG']) & int(0x800))
 
 def seq_reverse_complemented(record):
 	# 0x10 reverse complemented
-	return ((record ['FLAG']) & int(0x10))
+	return bool((record ['FLAG']) & int(0x10))
 
-def process_sam_file(sam_file, target_len):
+def process_sam_file_contigs(sam_file, target_len):
 	number = 0
 	mapped_number = 0
 	alignment = {}
@@ -112,14 +108,16 @@ def process_ref_file(ref_file):
 		target_len[elem.name] = len(elem.seq)
 	return target_len
 
-def process_contigs_coords(contigs_coords_path):
+def process_contigs_coords_names(contigs_coords_path):
 	insertion = {}
 	scaff_name = None
 	for line in open(contigs_coords_path):
 		if line.startswith('>'):
 			scaff_name = (line[1:]).strip()
 			continue
-		(contig_name, coords) = line.split()
+		(contig_name, coords, cont_len, is_new) = line.split()
+		if is_new == '-':
+			continue
 		coords = int(coords)
 		if not insertion.has_key(contig_name):
 			insertion[contig_name] = []
@@ -130,16 +128,129 @@ def compare_alignment_and_insertion(alignment, insertion, scaff_len, output_file
 	f_out = open(output_file_name, 'w')
 	for (contig_name, coords_list) in insertion.iteritems():
 		f_out.write(contig_name + '\t')
-		f_out.write('tool:\t')
+		f_out.write('tool:')
 		for (scaff_name, coords) in coords_list:
 			f_out.write(scaff_name + '\t' + str(coords) + '\t')
-		f_out.write('real:\t')
+		f_out.write('\n' + contig_name + '\t')
+		f_out.write('real:')
 		if not alignment.has_key(contig_name):
 			f_out.write('-\n')
 		else:
 			for ((ref_name, begin, end, rc)) in alignment[contig_name]:
 				f_out.write(ref_name + ' ' + (["[  ]", "[RC]"][rc]) + '\t' + str(begin) + '\t')
-			f_out.write('diff: ' + [str(begin - coords), str(scaff_len[scaff_name] + begin - coords)][begin - coords < 0] + '\n')
+			f_out.write('\n')
+		f_out.write('\tdiff:\t')
+		if not alignment.has_key(contig_name):
+			f_out.write('-\n')
+		else:
+			for ((ref_name, begin, end, rc)) in alignment[contig_name]:
+				for (scaff_name, coords) in coords_list:
+					f_out.write([str(begin - coords), str(scaff_len[scaff_name] + begin - coords)][begin - coords < 0] + '\t')
+			f_out.write('\n')
+	f_out.close()
+
+def process_contigs_coords_coords(contigs_coords_path, scaff_len):
+	insertion = {}
+	scaff_name = None
+	for line in open(contigs_coords_path):
+		if line.startswith('>'):
+			scaff_name = (line[1:]).strip()
+			insertion[scaff_name] = [None] * scaff_len[scaff_name]
+			continue
+		(contig_name, coords, cont_len, is_new) = line.split()
+		coords = int(coords)
+		cont_len = int(cont_len)
+		assert insertion[scaff_name][coords] == None
+		if is_new == '-':
+			is_new = False
+		elif is_new == '+':
+			is_new = True
+		insertion[scaff_name][coords] = (contig_name, cont_len, is_new)
+	return insertion
+
+def parse_cigar(cigar, beg_pos):
+	if cigar == "*":
+		return None
+	cigar_parsed = []
+	i = 0
+	count = 0
+	while i < len(cigar):
+		while (cigar[i + count]).isdigit():
+			count += 1
+		cigar_parsed.append((int(cigar[i:i+count]), cigar[i+count]))
+		i += count + 1
+		count = 0
+	matching_coords_list = []
+	target_pos = beg_pos
+	scaff_pos = 0
+	for (num, act) in cigar_parsed:
+		if act == 'M' or act == '=':
+			matching_coords_list.append((target_pos, scaff_pos, num))
+			target_pos += num
+			scaff_pos += num
+		elif act == 'I' or act == 'S' or act == 'H':
+			scaff_pos += num
+		elif act == 'D' or act == 'N':
+			target_pos += num
+		elif act == 'P':
+			pass
+		elif act == 'X':
+			target_pos += num
+			scaff_pos += num
+		else:
+			return None
+	return matching_coords_list
+
+def process_sam_file_scaffolds(sam_file_scaffolds):
+	alignment = {}
+	for line in open(sam_file_scaffolds):
+		record = parse_sam_record(line)
+		if record:
+			if sequence_unmapped(record) or supplementary_alignment(record):
+				continue
+			begin = record['POS']
+			ref_name = record['RNAME']
+			seq_name = record['QNAME']
+			strand = not seq_reverse_complemented(record)
+			matching_list = parse_cigar(record['CIGAR'].strip(), begin)
+			if not alignment.has_key(seq_name):
+				alignment[seq_name] = []
+			alignment[seq_name].append((ref_name, strand, matching_list))
+	return alignment
+
+def compare_alignment_and_insertion_scaffolds(alignment_scaffolds, insertion_coords, evaluation_scaffolds_filename, scaff_len):
+	contigs_insertion = {}
+	f_out = open(evaluation_scaffolds_filename, 'w')
+	for (scaff_name, scaff_alignment_list) in alignment_scaffolds.iteritems():
+		cur_scaff_len = scaff_len[scaff_name]
+		contigs_insertion[scaff_name] = [None] * len(insertion_coords[scaff_name])
+		for (ref_name, scaff_strand, matching_list) in scaff_alignment_list:
+			for (ref_pos, scaff_pos, matching_len) in matching_list:
+				scaff_beg = scaff_pos
+				scaff_end = scaff_pos + matching_len
+				if not scaff_strand:
+					scaff_beg = cur_scaff_len - (scaff_pos + matching_len)
+					scaff_end = cur_scaff_len - scaff_pos
+				contigs_insertion[scaff_name][scaff_beg] = (ref_pos, ref_name, scaff_end, scaff_strand)
+		f_out.write('>' + scaff_name + '\n')
+		for i in xrange(cur_scaff_len):
+			if contigs_insertion[scaff_name][i] != None:
+				(ref_pos, ref_name, scaff_end, scaff_strand) = contigs_insertion[scaff_name][i]
+				scaff_beg = i
+				f_out.write(ref_name + '\t' + str(ref_pos) + '\tscaff: ' + str(scaff_beg) + '-' + str(scaff_end) + '\t' + (["[RC]", "[  ]"][scaff_strand]) + '\n')
+				contig_beg = i
+				while contig_beg >= 0 and insertion_coords[scaff_name][contig_beg] == None:
+					contig_beg -= 1
+				(contig_name, cont_len, is_new) = insertion_coords[scaff_name][contig_beg]
+				if contig_beg + cont_len >= scaff_beg:
+					f_out.write('\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\t' + (["old", "new"][is_new]) + '\n')
+				contig_beg += 1
+				while contig_beg < cur_scaff_len and contig_beg <= scaff_end:
+					if insertion_coords[scaff_name][contig_beg] != None:
+						(contig_name, cont_len, is_new) = insertion_coords[scaff_name][contig_beg]
+						f_out.write('\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\t' + (["old", "new"][is_new]) + '\n')
+					contig_beg += 1
+				
 	f_out.close()
 
 if __name__ == "__main__":
@@ -162,16 +273,23 @@ if __name__ == "__main__":
 	contigs_coords_path = args.coords
 	scaffolds_path = args.scaff
 
-	data_name = os.path.join(os.path.dirname(unused_contigs_path), 'unused_to_target')
-	sam_file = build_alignment_bwa(bwa_path, data_name, target_path, unused_contigs_path)
+	data_name_contigs = os.path.join(os.path.dirname(unused_contigs_path), 'unused_to_target')
+	sam_file_contigs = build_alignment_bwa(bwa_path, data_name_contigs, target_path, unused_contigs_path)
 	target_len = process_ref_file(target_path)
-	alignment = process_sam_file(sam_file, target_len)
-	insertion = process_contigs_coords(contigs_coords_path)
-	output_file_name = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation_result.txt')
+	alignment_contigs = process_sam_file_contigs(sam_file_contigs, target_len)
+	insertion_names = process_contigs_coords_names(contigs_coords_path)
+	evaluation_contigs_filename = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation_contigs_result.txt')
 	scaff_len = process_ref_file(scaffolds_path)
-	compare_alignment_and_insertion(alignment, insertion, scaff_len, output_file_name)
+	compare_alignment_and_insertion(alignment_contigs, insertion_names, scaff_len, evaluation_contigs_filename)
+
+	data_name_scaffolds = os.path.join(os.path.dirname(unused_contigs_path), 'scaffolds_to_target')
+	sam_file_scaffolds = build_alignment_bwa(bwa_path, data_name_scaffolds, target_path, scaffolds_path)
+	insertion_coords = process_contigs_coords_coords(contigs_coords_path, scaff_len)
+	alignment_scaffolds = process_sam_file_scaffolds(sam_file_scaffolds)
+	evaluation_scaffolds_filename = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation_scaffolds_result.txt')
+	compare_alignment_and_insertion_scaffolds(alignment_scaffolds, insertion_coords, evaluation_scaffolds_filename, scaff_len)
 	
 	print
 	print '=============================='
-	print 'Result can be found in', output_file_name
+	print 'Result can be found in', evaluation_contigs_filename
 

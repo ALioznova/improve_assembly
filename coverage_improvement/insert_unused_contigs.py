@@ -36,7 +36,7 @@ def parse_recipe(ragout_recipe):
 def build_alignment_bwa(bwa_path, data_name, ref_file, contigs_file):
 	subprocess.call([os.path.join(bwa_path, "bwa"), "index", ref_file])
 	with open(data_name + "_aligned.sam", "w") as sam_file:
-		subprocess.call([os.path.join(bwa_path, "bwa"), "mem", ref_file, contigs_file], stdout = sam_file)
+		subprocess.call([os.path.join(bwa_path, "bwa"), "mem", ref_file, contigs_file, "-a"], stdout = sam_file)
 	os.remove(ref_file + ".amb")
 	os.remove(ref_file + ".ann")
 	os.remove(ref_file + ".bwt")
@@ -102,16 +102,16 @@ def process_ref_file(ref_file, ref_name):
 	return coverage
 
 def sequence_unmapped(record):
-	# 0x4 segment unmapped, 0x8 next segment in the template unmapped
-	return (record ['FLAG'] & int(0x4)) or (record ['FLAG'] & int(0x8))
+	# 0x4 segment unmapped
+	return bool(record ['FLAG'] & int(0x4))
 
 def supplementary_alignment(record):
 	# 0x800 supplementary alignment
-	return ((record ['FLAG']) & int(0x800))
+	return bool((record ['FLAG']) & int(0x800))
 
 def seq_reverse_complemented(record):
 	# 0x10 reverse complemented
-	return ((record ['FLAG']) & int(0x10))
+	return bool((record ['FLAG']) & int(0x10))
 
 def process_sam_file(ref_file, sam_file, reference_name):
 	alignment = process_ref_file(ref_file, reference_name)
@@ -266,6 +266,7 @@ def get_scaffolds_as_blocks(scaffolds_as_contigs, name_to_seq_id, seq_as_blocks)
 	return scaffolds_as_blocks
 
 def get_unused_contigs_aligmnent(work_dir, unused_contigs_path, fasta_pathes, target_name, bwa_path):
+	unused_contigs_count_set = Set()
 	sam_files = {}
 	unused_contigs_alignment = {}
 	for ref_name in fasta_pathes.iterkeys():
@@ -283,6 +284,12 @@ def get_unused_contigs_aligmnent(work_dir, unused_contigs_path, fasta_pathes, ta
 		alignment = process_sam_file(ref_path, sam_file, ref_name)
 		for (name, seq) in alignment.iteritems():
 			unused_contigs_alignment[name] = seq
+			for info in seq:
+				for elem in info:
+					(end, cont_name, strand) = elem
+					unused_contigs_count_set.add(cont_name)
+	print
+	print 'Number of aligned contigs', len(unused_contigs_count_set)
 	return unused_contigs_alignment
 
 def get_neighbour_blocks_to_unused_contigs(unused_contigs_alignment, name_to_seq_id, seq_as_blocks):
@@ -573,10 +580,11 @@ def output_new_contigs_coords(new_contig_order, all_contigs, new_contigs_coords_
 			if not elem[2]:
 				(cont_name, gap, is_new) = elem
 				cur_pos += gap
+				f_out.write(cont_name + '\t' + str(cur_pos) + '\t' + str(len(all_contigs[cont_name[1:]])) + '\t-' + '\n')
 			else:
 				(cont_name, gap, is_new, ref_support) = elem
 				cur_pos += gap
-				f_out.write(cont_name + '\t' + str(cur_pos) + '\n')
+				f_out.write(cont_name + '\t' + str(cur_pos) + '\t' + str(len(all_contigs[cont_name[1:]])) + '\t+' + '\n')
 			cur_pos += len(all_contigs[cont_name[1:]])
 	f_out.close()
 
