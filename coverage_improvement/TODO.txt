@@ -1,7 +1,5 @@
 #TODO:
-# output new *.links file, add ref support info
-# check overlap of new contigs when forming fasta, check old ones too
-# output scaffolds
+# explore 10% error
 # distances in phylo trees
 # quality of mapping
 # circular genomes
