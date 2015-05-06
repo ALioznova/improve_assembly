@@ -218,7 +218,7 @@ def process_sam_file_scaffolds(sam_file_scaffolds):
 			alignment[seq_name].append((ref_name, strand, matching_list))
 	return alignment
 
-def compare_alignment_and_insertion_scaffolds(alignment_scaffolds, insertion_coords, evaluation_scaffolds_filename, scaff_len):
+def compare_alignment_and_insertion_sam_scaffolds(alignment_scaffolds, insertion_coords, evaluation_scaffolds_filename, scaff_len):
 	contigs_insertion = {}
 	f_out = open(evaluation_scaffolds_filename, 'w')
 	for (scaff_name, scaff_alignment_list) in alignment_scaffolds.iteritems():
@@ -253,6 +253,70 @@ def compare_alignment_and_insertion_scaffolds(alignment_scaffolds, insertion_coo
 				
 	f_out.close()
 
+def build_alignment_mummer(mummer_path, data_name, ref_file, qry_file):
+	subprocess.call([os.path.join(mummer_path, "nucmer"), '-p', data_name + '_nucmer', ref_file, qry_file])
+	with open(data_name + '_nucmer.coords', "w") as coords_file:
+		subprocess.call([os.path.join(mummer_path, "show-coords"), '-qldc' , data_name + '_nucmer.delta'], stdout = coords_file)
+	return data_name + '_nucmer.coords'
+
+def process_coords_file_scaffolds(coords_file_scaffolds):
+	alignment = {}
+	with open(coords_file_scaffolds) as fp:
+		fp.readline()
+		fp.readline()
+		fp.readline()
+		fp.readline()
+		fp.readline()
+		while True:
+			line = fp.readline()
+			if line == '':
+				break
+			info = (line.strip()).split()
+			s1 = int(info[0])
+			e1 = int(info[1])
+			s2 = int(info[3])
+			e2 = int(info[4])
+			len1 = int(info[6])
+			len2 = int(info[7])
+			idy = float(info[9])
+			lenr = int(info[11])
+			lenq = int(info[12])
+			covr = float(info[14])
+			covq = float(info[15])
+			strand_r = [True, False][int(info[17]) == -1]
+			strand_q = [True, False][int(info[18]) == -1]
+			ref_name = info[19]
+			scaff_name = info[20]
+			if not alignment.has_key(scaff_name):
+				empty_list = []
+				for i in xrange(lenq):
+					empty_list.append([])
+				alignment[scaff_name] = empty_list
+			alignment[scaff_name][min(s2, e2)].append((min(s1, e1), ref_name, max(s2, e2), [False, True][strand_r == strand_q]))
+	return alignment
+
+def compare_alignment_and_insertion_coords_scaffolds(alignment_scaffolds, insertion_coords, evaluation_scaffolds_filename):
+	f_out = open(evaluation_scaffolds_filename, 'w')
+	for (scaff_name, contigs_insertion) in alignment_scaffolds.iteritems():
+		f_out.write('>' + scaff_name + '\n')
+		for i in xrange(len(contigs_insertion)):
+			for (ref_pos, ref_name, scaff_end, scaff_strand) in contigs_insertion[i]:
+				scaff_beg = i
+				f_out.write(ref_name + '\t' + str(ref_pos) + '\tscaff: ' + str(scaff_beg) + '-' + str(scaff_end) + '\t' + (["[RC]", "[  ]"][scaff_strand]) + '\n')
+				contig_beg = i
+				while contig_beg >= 0 and insertion_coords[scaff_name][contig_beg] == None:
+					contig_beg -= 1
+				(contig_name, cont_len, is_new) = insertion_coords[scaff_name][contig_beg]
+				if contig_beg + cont_len >= scaff_beg:
+					f_out.write('\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\t' + (["old", "new"][is_new]) + '\n')
+				contig_beg += 1
+				while contig_beg < len(contigs_insertion) and contig_beg <= scaff_end:
+					if insertion_coords[scaff_name][contig_beg] != None:
+						(contig_name, cont_len, is_new) = insertion_coords[scaff_name][contig_beg]
+						f_out.write('\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\t' + (["old", "new"][is_new]) + '\n')
+					contig_beg += 1
+	f_out.close()
+
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
 		print "Usage:", sys.argv[0], "-b <path to bwa> -u <unused contigs> -t <target genome> -c <new contigs coords> -s <scaffolds>"
@@ -261,6 +325,7 @@ if __name__ == "__main__":
 
 	parser = argparse.ArgumentParser(prog = sys.argv[0], description='Evaluate insertion unused contigs.')
 	parser.add_argument("-b", "--bwa", help="path to bwa", required=True)
+	parser.add_argument("-m", "--mummer", help="path to mummer", required=True)
 	parser.add_argument("-u", "--unused", help="unused contigs", required=True)
 	parser.add_argument("-t", "--target", help="target genome", required=True)
 	parser.add_argument("-c", "--coords", help="new contigs coords", required=True)
@@ -268,26 +333,31 @@ if __name__ == "__main__":
 
 	args = parser.parse_args()
 	bwa_path = args.bwa
+	mummer_path = args.mummer
 	unused_contigs_path = args.unused
 	target_path = args.target
 	contigs_coords_path = args.coords
 	scaffolds_path = args.scaff
 
-	data_name_contigs = os.path.join(os.path.dirname(unused_contigs_path), 'unused_to_target')
+	work_dir = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation')
+	if not os.path.exists(work_dir):
+		os.mkdir(work_dir)
+
+	data_name_contigs = os.path.join(work_dir, 'unused_to_target')
 	sam_file_contigs = build_alignment_bwa(bwa_path, data_name_contigs, target_path, unused_contigs_path)
 	target_len = process_ref_file(target_path)
 	alignment_contigs = process_sam_file_contigs(sam_file_contigs, target_len)
 	insertion_names = process_contigs_coords_names(contigs_coords_path)
-	evaluation_contigs_filename = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation_contigs_result.txt')
+	evaluation_contigs_filename = os.path.join(work_dir, 'evaluation_contigs_result.txt')
 	scaff_len = process_ref_file(scaffolds_path)
 	compare_alignment_and_insertion(alignment_contigs, insertion_names, scaff_len, evaluation_contigs_filename)
 
-	data_name_scaffolds = os.path.join(os.path.dirname(unused_contigs_path), 'scaffolds_to_target')
-	sam_file_scaffolds = build_alignment_bwa(bwa_path, data_name_scaffolds, target_path, scaffolds_path)
+	data_name_scaffolds = os.path.join(work_dir, 'scaffolds_to_target')
+	coords_file_scaffolds = build_alignment_mummer(mummer_path, data_name_scaffolds, target_path, scaffolds_path)
 	insertion_coords = process_contigs_coords_coords(contigs_coords_path, scaff_len)
-	alignment_scaffolds = process_sam_file_scaffolds(sam_file_scaffolds)
-	evaluation_scaffolds_filename = os.path.join(os.path.dirname(unused_contigs_path), 'evaluation_scaffolds_result.txt')
-	compare_alignment_and_insertion_scaffolds(alignment_scaffolds, insertion_coords, evaluation_scaffolds_filename, scaff_len)
+	alignment_scaffolds = process_coords_file_scaffolds(coords_file_scaffolds)
+	evaluation_scaffolds_filename = os.path.join(work_dir, 'evaluation_scaffolds_result.txt')
+	compare_alignment_and_insertion_coords_scaffolds(alignment_scaffolds, insertion_coords, evaluation_scaffolds_filename)
 	
 	print
 	print '=============================='
