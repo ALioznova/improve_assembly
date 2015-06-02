@@ -302,18 +302,18 @@ def compare_alignment_and_insertion_coords_scaffolds(alignment_scaffolds, insert
 		for i in xrange(len(contigs_insertion)):
 			for (ref_pos, ref_name, scaff_end, scaff_strand) in contigs_insertion[i]:
 				scaff_beg = i
-				f_out.write(ref_name + '\t' + str(ref_pos) + '\tscaff: ' + str(scaff_beg) + '-' + str(scaff_end) + '\t' + (["[RC]", "[  ]"][scaff_strand]) + '\n')
+				f_out.write(ref_name + '\t' + (["[RC]", "[  ]"][scaff_strand]) + '\t' + str(ref_pos) + '\tscaff: ' + str(scaff_beg) + '-' + str(scaff_end) + '\n')
 				contig_beg = i
 				while contig_beg >= 0 and insertion_coords[scaff_name][contig_beg] == None:
 					contig_beg -= 1
 				(contig_name, cont_len, is_new) = insertion_coords[scaff_name][contig_beg]
 				if contig_beg + cont_len >= scaff_beg:
-					f_out.write('\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\t' + (["old", "new"][is_new]) + '\n')
+					f_out.write('\t' + (["old", "new"][is_new]) + '\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\n')
 				contig_beg += 1
 				while contig_beg < len(contigs_insertion) and contig_beg <= scaff_end:
 					if insertion_coords[scaff_name][contig_beg] != None:
 						(contig_name, cont_len, is_new) = insertion_coords[scaff_name][contig_beg]
-						f_out.write('\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\t' + (["old", "new"][is_new]) + '\n')
+						f_out.write('\t' + (["old", "new"][is_new]) + '\t' + contig_name + '\t' + str(contig_beg) + '-' + str(contig_beg + cont_len) + '\n')
 					contig_beg += 1
 	f_out.close()
 

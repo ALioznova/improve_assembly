@@ -1,10 +1,8 @@
 from sets import Set
-import numpy
 import os
 import sys
 import argparse
 import subprocess
-import numpy
 from Bio import SeqIO
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -620,11 +618,12 @@ if __name__ == "__main__":
 	parser.add_argument("-b", "--bwa", help="path to bwa", required=True)
 	parser.add_argument("-w", "--workdir", help="ragout workdir", required=True)
 	parser.add_argument("-r", "--recipe", help="ragout recipe", required=True)
-
+	parser.add_argument("-d", "--debug", help="add debugging output", action="store_true")
 	args = parser.parse_args()
 	bwa_path = args.bwa
 	ragout_workdir_path = args.workdir
 	ragout_recipe = args.recipe
+	debug = args.debug
 
 	if os.path.exists(os.path.join(ragout_workdir_path, "scaffolds_refined.links")):
 		scaffolds_links_path = os.path.join(ragout_workdir_path, "scaffolds_refined.links")
@@ -667,14 +666,18 @@ if __name__ == "__main__":
 		blocks_to_insert = find_blocks_to_insert(scaffolds_as_blocks, neighbour_blocks)
 		contigs_between_blocks[b] = blocks_to_insert
 		
-		output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename, block_size)
+		if debug:
+			output_scaffolds_as_blocks(scaffolds_as_blocks, scaffolds_as_blocks_filename, block_size)
 		
-	output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs)
+	if debug:
+		output_contigs_between_blocks(contigs_between_blocks, contigs_between_blocks_filename, all_contigs)
 	contigs_coords = get_contig_coords_bounds(contigs_between_blocks, all_contigs)
-	output_contigs_coords_info(contigs_coords, contigs_coords_info_filename)
+	if debug:
+		output_contigs_coords_info(contigs_coords, contigs_coords_info_filename)
 	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs)
 	number_of_inserted_contigs = output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
-	output_new_contigs_coords(new_contig_order, all_contigs, new_contigs_coords_filename)
+	if debug:
+		output_new_contigs_coords(new_contig_order, all_contigs, new_contigs_coords_filename)
 	output_scaffolds_as_fasta(new_contig_order, all_contigs, scaffolds_as_fasta_filename)
 
 	print

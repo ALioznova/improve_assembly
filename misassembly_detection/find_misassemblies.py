@@ -136,7 +136,7 @@ def estimate_tlen(sam_file):
             num += 1
         if num >= NUMBER_FOR_ESTIMATION:
             break
-    average_tlen = numpy.mean(tlen_list)
+    average_tlen = numpy.median(tlen_list)
     sigma_tlen = numpy.std(tlen_list)
     return (average_tlen, sigma_tlen)
 
@@ -208,10 +208,10 @@ def estimate_coverage(coverage):
                 break
         if number >= NUMBER_FOR_ESTIMATION:
             break
-    average_coverage = numpy.mean(coverage_list)
+    average_coverage = numpy.median(coverage_list)
     sigma_coverage = numpy.std(coverage_list)
-    number_of_begining_reads = numpy.mean(list_of_begining_reads)
-    number_of_ending_reads = numpy.mean(list_of_ending_reads)
+    number_of_begining_reads = numpy.median(list_of_begining_reads)
+    number_of_ending_reads = numpy.median(list_of_ending_reads)
     return ((average_coverage, sigma_coverage), (number_of_begining_reads, number_of_ending_reads))
 
 
