@@ -550,6 +550,7 @@ def get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_
 	return new_contig_order
 
 def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename):
+	set_of_inserted_contigs = Set()
 	number_of_inserted_contigs = 0
 	f_out = open(scaffolds_as_contigs_filename, 'w')
 	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
@@ -560,6 +561,7 @@ def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_
 				(cont_name, gap, is_new) = elem
 				f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\n')
 			else:
+				set_of_inserted_contigs.add(cont_name[1:])
 				number_of_inserted_contigs += 1
 				(cont_name, gap, is_new, ref_support) = elem
 				f_out.write(cont_name + '\t' + str(gap) + '\t' + str(is_new) + '\t')
@@ -567,7 +569,7 @@ def output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_
 					f_out.write(ref_support[i].split('.')[0] + ',')
 				f_out.write(ref_support[-1].split('.')[0] + '\n')
 	f_out.close()
-	return number_of_inserted_contigs
+	return (len(set_of_inserted_contigs), number_of_inserted_contigs)
 
 def output_new_contigs_coords(new_contig_order, all_contigs, new_contigs_coords_filename):
 	f_out = open(new_contigs_coords_filename, 'w')
@@ -607,6 +609,36 @@ def output_scaffolds_as_fasta(new_contig_order, all_contigs, scaffolds_as_fasta_
 	output_handle = open(scaffolds_as_fasta_filename, 'w')
 	SeqIO.write(scaffolds_fasta, output_handle, "fasta")
 	output_handle.close()
+
+def output_links_for_new_scaffolds(new_contig_order, new_links_for_scaffolds_filename):
+	f_out = open(new_links_for_scaffolds_filename, 'w')
+	for (scaff_name, scaff_seq) in new_contig_order.iteritems():
+		f_out.write('-------------------------------------------------------------\n')
+		f_out.write(scaff_name + '\n')
+		f_out.write('-------------------------------------------------------------\n')
+		f_out.write('contig_1    contig_2    gap     ref_support            ~>    \n')
+		f_out.write('-------------------------------------------------------------\n')
+		prev_cont = None
+		for elem in scaff_seq:
+			if not elem[2]:
+				(cont_name, gap, is_new) = elem
+				if prev_cont == None:
+					prev_cont = cont_name
+					continue
+				f_out.write(prev_cont + '\t' + cont_name + '\t' + str(gap) + '\t\t\n')
+				prev_cont = cont_name
+			else:
+				(cont_name, gap, is_new, ref_support) = elem
+				if prev_cont == None:
+					prev_cont = cont_name
+					continue
+				f_out.write(prev_cont + '\t' + cont_name + '\t' + str(gap) + '\t')
+				prev_cont = cont_name
+				for i in xrange(len(ref_support) - 1):
+					f_out.write(ref_support[i].split('.')[0] + ',')
+				f_out.write(ref_support[-1].split('.')[0] + '\t\n')
+	f_out.close()
+
 
 if __name__ == "__main__":
 	if len(sys.argv) == 1:
@@ -648,6 +680,7 @@ if __name__ == "__main__":
 	scaffolds_as_contigs_filename = os.path.join(work_dir, 'scaffolds_as_contigs.txt')
 	new_contigs_coords_filename =  os.path.join(work_dir, 'new_contigs_coords.txt')
 	scaffolds_as_fasta_filename = os.path.join(work_dir, 'scaffolds.fasta')
+	new_links_for_scaffolds_filename = os.path.join(work_dir, 'scaffolds_new.links')
 
 	if os.path.exists(scaffolds_as_blocks_filename):
 		os.remove(scaffolds_as_blocks_filename)
@@ -675,14 +708,16 @@ if __name__ == "__main__":
 	if debug:
 		output_contigs_coords_info(contigs_coords, contigs_coords_info_filename)
 	new_contig_order = get_scaffolds_as_contigs_and_gaps(scaffolds_as_contigs, contigs_coords, all_contigs)
-	number_of_inserted_contigs = output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
+	(number_of_inserted_unique_contigs, total_number_of_inserted_contigs) = output_scaffolds_as_contigs_and_gaps(new_contig_order, scaffolds_as_contigs_filename)
 	if debug:
 		output_new_contigs_coords(new_contig_order, all_contigs, new_contigs_coords_filename)
 	output_scaffolds_as_fasta(new_contig_order, all_contigs, scaffolds_as_fasta_filename)
+	if debug:
+		output_links_for_new_scaffolds(new_contig_order, new_links_for_scaffolds_filename)
 
 	print
 	print '=============================='
-	print number_of_inserted_contigs, 'of ', len(unused_contigs_set), 'unused contigs were added'
+	print number_of_inserted_unique_contigs, 'unique', total_number_of_inserted_contigs, '(total)', 'of ', len(unused_contigs_set), 'unused contigs were added'
 	print 'Result can be found in', scaffolds_as_contigs_filename
 	print
 	print 'New scaffolds are in', scaffolds_as_fasta_filename

@@ -29,6 +29,8 @@ It works with Ragout: https://github.com/fenderglass/Ragout
     Contains alignment of unused contigs to reference genome
     ref_name.
 The rest files are available in debug mode.
+- Ragout_workdir/unused_contigs_workdir/scaffolds_new.links
+    File with new links for evaluation.
 - Ragout_workdir/unused_contigs_workdir/new_contigs_coords.txt
     Coords of inserted contigs.
 - Ragout_workdir/unused_contigs_workdir/contigs_between_blocks.txt
